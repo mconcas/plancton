@@ -1,0 +1,3 @@
+[Manager Configuration]
+   ContainerConf = conf/worker_centos6.json
+   SocketPath = %2Fvar%2Frun%2Fdocker.sock

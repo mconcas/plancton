@@ -15,6 +15,7 @@ except ImportError, e:
 
     exit(-1)
 
+
 def container_list_counter(socket_url, session):
     """
     This function wraps some requests and return the number of running
@@ -33,14 +34,14 @@ def container_list_counter(socket_url, session):
             else:
                 status = list_json[i]['Status']
 
-            logging.info('\t |_ Id: ' + list_json[i]['Id'] + ' |_ Status: ' \
+            logging.info('\t |- Id: ' + list_json[i]['Id'] + ' |- Status: ' \
             + str(status))
 
         return len(list_json)
 
     except requests.exceptions.ConnectionError:
         logging.error('Conn. Error: couldn\'t find a proper socket. '
-            + ' Is the docker daemon running correctly?'
+            + ' Is the Docker daemon running correctly?'
             + ' Check if /var/run/docker.sock exists.' )
 
         exit(-1)
