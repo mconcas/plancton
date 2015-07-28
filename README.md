@@ -2,8 +2,7 @@
 ## Python script that keeps alive a specified number of running containers on the docker host.
 Prerequisites:
   * requests_unixsocket:
-
-      pip install --user requests_unixsocket
+        pip install --user requests_unixsocket
 
 
 It provides:
