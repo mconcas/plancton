@@ -1,6 +1,7 @@
 # container-spawner
-## Python script that keeps alive 'n' running containers on the running host.
+## Python script that keeps alive a specified number of running containers on the docker host.
 It provides:
+  * Api (v1.19) used to interact with the Docker daemon.
   * Failback and failover system: it prevents from ghost exited containers to remain untreatened or abandoned.
   * Delimited area of competence: it would never try to interact with user-owned other containers.
   * Configuration: loads manager.conf and container.json for easy-to-use configuration.
