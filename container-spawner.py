@@ -13,7 +13,7 @@ from configobj import ConfigObj
 try:
     import requests_unixsocket, requests.exceptions
 except ImportError, e:
-    print 'Couldn\'t find the requests_unixsocket module. Please check the prereqs...'
+    print 'Couldn\'t find the requests_unixsocket module. Please check the prereqs...' \
         + str(e)
 
     sys.exit(-1)
@@ -38,7 +38,7 @@ class ContainerManager(object):
             '[%(module)s.%(funcName)s] %(message)s'
         datefmt = '%Y-%m-%d %H:%M:%S'
         log_file_handler = logging.handlers.RotatingFileHandler(self._logpath, mode='a',
-            maxBytes=1000000, backupCount=3)
+            maxBytes=1000000, backupCount=0)
         log_file_handler.setFormatter(logging.Formatter(format, datefmt))
         log_file_handler.doRollover()
         self._logger.setLevel(10)
@@ -56,7 +56,7 @@ class ContainerManager(object):
         mancfg = 'Manager Configuration'
         logpath = self._config[mancfg]['LogPath']
         if not logpath == self._logpath:
-            self._logger('Overriding default conf. setting logfile to:' + logpath)
+            self._logger.info('Overriding default conf. setting logfile to:' + logpath)
         self._logpath = logpath
         self._socket_path = self._config[mancfg]['SocketPath']
         self._container_conf_file = self._config[mancfg]['ContainerConf']
