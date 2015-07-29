@@ -18,7 +18,7 @@ except ImportError, e:
 
     sys.exit(-1)
 
-class ContainerManager(object):
+class ContainerPoolManager(object):
     __version__ = '0.0.2'
 
     def __init__(self):
@@ -26,16 +26,16 @@ class ContainerManager(object):
         self._logger = logging.getLogger(self._name)
 
         ## Can be overridden by manual configuration.
-        self._logpath = '/tmp/dev-container-manager.log'
+        self._logpath = '/tmp/container-manager.log'
         self._session = requests_unixsocket.Session()
-        self._container_registry = []
+        # self._container_registry = []
 
     ## _setup_logger: sets up logs.
     #
     # @return nothing
     def _setup_logger(self):
-        format = '%(asctime)s %(name)s %(levelname)s ' + \
-            '[%(module)s.%(funcName)s] %(message)s'
+        format = '%(asctime)s %(name)s %(levelname)s ' \
+            + '[%(module)s.%(funcName)s] %(message)s'
         datefmt = '%Y-%m-%d %H:%M:%S'
         log_file_handler = logging.handlers.RotatingFileHandler(self._logpath, mode='a',
             maxBytes=1000000, backupCount=0)
@@ -61,12 +61,6 @@ class ContainerManager(object):
         self._socket_path = self._config[mancfg]['SocketPath']
         self._container_conf_file = self._config[mancfg]['ContainerConf']
 
-        ## ATM this is hardcoded.
-        self._container_registry_file = '/tmp/container-manager.reg'
-
-        # If any, recover from file.
-        self._update_registry_from_file()
-
     ## _list_container: lists existing containers and their own statuses.
     #
     #  NEW:
@@ -75,41 +69,48 @@ class ContainerManager(object):
     #  Thus is provided a sort of isolation.
     #
     #  @return the list length.
-    def _list_container(self):
+    def _list_container(self, quiet=False):
         """
         This function wraps some requests, prints container list in the log file
         and returns the number of running _owned_ containers.
         """
         try:
-            self._logger.debug('Trying to attach to : http+unix://'
-                + self._socket_path + '/containers/json?all=1')
             self._logger.info('Checking container list...')
             request = self._session.get('http+unix://' + self._socket_path
                 + '/containers/json?all=1')
             request.raise_for_status()
             self._jsoncontlist = json.loads(request.content)
 
-            contnum = len(self._jsoncontlist) # Total containers number.
+            self._contnum = len(self._jsoncontlist) # Total containers number.
             self._logger.debug('Found %r container(s) in the whole Docker database.' \
-                % contnum)
+                % self._contnum)
             self._logger.info('Listing below...')
 
             ## Since the APIs return all the containers in the list, even the ones ran
             #  by other users, we must provide, at some point, a kind of isolation.
-            #  Thus we can work safely using our local list of containers' Ids.
+            #  NEW: isolation is now provided by read a special label: container.label
+            #  and asking it corresponds to a specified value.
+
             owned_containers = 0
-            for i in range(0, contnum):
-                id = str(self._jsoncontlist[i]['Id'])
-                if id in self._container_registry:
-                    owner = 'spawner-agent'
-                    owned_containers+=1
-                else:
+
+            for i in range(0, self._contnum):
+                try:
+                    contlabel = self._jsoncontlist[i]['Labels']['container.label']
+                    if contlabel == 'worker-node':
+                        owner = 'spawner-agent'
+                        owned_containers+=1
+                    else:
+                        owner = 'others       '
+
+                except KeyError:
                     owner = 'others       '
+
                 status = self._jsoncontlist[i]['Status']
                 if not status:
                     status = 'Created (Not Running)'
-                self._logger.info('\t [ ID: %s ] [ OWNER: %s ] [ STATUS: %s ] ' \
-                    % (id, owner, status))
+                if not quiet:
+                    self._logger.info('\t [ ID: %s ] [ OWNER: %s ] [ STATUS: %s ] ' \
+                        % (id, owner, status))
 
             self._logger.info('Found %r "owned" container(s).' % owned_containers)
 
@@ -130,87 +131,6 @@ class ContainerManager(object):
 
             sys.exit(-1)
 
-    ## _registry_file_update: performs an update of the backup registry file.
-    #
-    # @return nothing
-    def _registry_file_update(self):
-
-        flags = os.O_CREAT | os.O_EXCL | os.O_RDONLY
-        try:
-            file_handle = os.open(self._container_registry_file, flags, 0600)
-        except OSError as e:
-            if e.errno == errno.EEXIST:  # Failed as the file already exists.
-                self._logger.info('Updating registry file: '
-                    + self._container_registry_file)
-
-                ## Checking right permissions.
-                reg_stats = os.stat(self._container_registry_file)
-                if not bool((reg_stats[ST_MODE] & S_IRWXG) or (reg_stats[ST_MODE] \
-                    & S_IRWXO)):
-                    with open(self._container_registry_file, 'w') as registry:
-
-                        ## Feed the registry.
-                        for line in self._container_registry:
-                            registry.write(line + '\n')
-                else:
-                    self._logger.warning('Wrong permissions on %s, not updating...' \
-                        % self._container_registry_file)
-
-            else:  # Something unexpected went wrong so reraise the exception.
-                self._logger.debug('Failed to get a file descriptor for %s. '
-                    + ' Traceback follows.' \
-                    % self._container_registry_file)
-                self._logger.error(e)
-
-                sys.exit(-1)
-
-    ## _update_registry_from_file: performs an update from the backup registry file.
-    #
-    # @return nothing
-    def _update_registry_from_file(self):
-        ####==============================================================================
-        # Thanks to: stackoverflow.com/questions/10978869 for the advice.
-        # Trying to avoid race condition, excluding symlinks.
-        # When these two flags are specified, symbolic links are not followed: if pathname
-        # is a symbolic link, then open() fails regardless of where the symbolic
-        # link points to.
-        #
-        # Just providing a safer failover recovery.
-        # In this particular case we are just checking if a non empty ".reg" file is
-        # already present in the proper directory.
-        # If any try to load that list.
-        ####==============================================================================
-
-        flags = os.O_CREAT | os.O_EXCL | os.O_RDONLY
-        try:
-            file_handle = os.open(self._container_registry_file, flags, 0600)
-        except OSError as e:
-            if e.errno == errno.EEXIST:  # Failed as the file already exists.
-                self._logger.info('Found existent registry file: '
-                    + self._container_registry_file)
-
-                ## Checking right permissions.
-                reg_stats = os.stat(self._container_registry_file)
-                if not bool((reg_stats[ST_MODE] & S_IRWXG) or (reg_stats[ST_MODE] \
-                    & S_IRWXO)):
-
-                    with open(self._container_registry_file, 'r') as registry:
-
-                        ## Feed the registry.
-                        for line in registry:
-                            self._container_registry.append(line.rstrip('\n'))
-                else:
-                    self._logger.warning('Wrong permissions on %s, ignoring it.' \
-                        % self._container_registry_file)
-
-            else:  # Something unexpected went wrong so reraise the exception.
-                self._logger.debug('Failed to get a file descriptor for %s. '
-                    + ' Traceback follows.' \
-                    % self._container_registry_file)
-                self._logger.error(e)
-
-                sys.exit(-1)
-
     ## Create a container following from a json cfg file.
     #
     # @return nothing.
@@ -223,7 +143,6 @@ class ContainerManager(object):
         try:
             with open(self._container_conf_file) as data_file:
                 data = json.load(data_file)
-                ## self._logger.info(str(data))
                 headers = {'content-type':'application/json', 'Accept':'text/plain'}
                 try:
                     request = self._session.post('http+unix://' + self._socket_path \
@@ -231,16 +150,6 @@ class ContainerManager(object):
                     request.raise_for_status()
                     self._logger.debug('Successfully created: ' + str(request.content))
                     c_id = str(json.loads(request.content)['Id'])
-
-                    if not c_id in self._container_registry:
-                        self._logger.debug('Appending %s to inner list.' \
-                            % c_id[0:12])
-                        self._container_registry.append(c_id)
-
-                    ## Before returning is a good choice to backup the registry to the
-                    #  .reg file. Since a container creation is not done with an high
-                    #  frequency this should not cause overhead issues.
-                    self._registry_file_update()
 
                     return c_id
 
@@ -298,63 +207,34 @@ class ContainerManager(object):
         Wipes out all the Created and Exited containers.
         """
 
-        self._logger.info('Reading from local registry list...')
-        # listjson = json.loads(request.content)
-        # for i in range(0, len(listjson)):
-        for id in self._container_registry:
-            try:
-                request = self._session.get('http+unix://' + self._socket_path
-                    + '/containers/' + id[0:12] + '/json')
-                request.raise_for_status()
-
-                jsonctnt = json.loads(request.content)
-                if not jsonctnt['State']['Running']:
-                     try:
-                         request = self._session.delete('http+unix://' \
-                             + self._socket_path + '/containers/' + id)
-                         request.raise_for_status()
-
-                         self._logger.info('Deleted: %s, its running status was: %s' \
-                             % ( id, jsonctnt['State']['Running']))
-
-                         tmp_reg = self._container_registry
-                         tmp_reg = [x for x in tmp_reg if x != id]
-                         self._container_registry = tmp_reg
-                         
-                     except requests.exceptions.HTTPError as e:
-                         self._logger.debug('HTTPError: ' + request.content)
-                         self._logger.error(e)
-                         self._logger.warning('It couldn\'t be possibile to delete '
-                            + ' container: ' + id )
-
-            except requests.exceptions.ConnectionError:
-                self._logger.error('Connection Err: can\'t find a proper socket. \
-                    Is the docker daemon running correctly? \
-                    Check if /var/run/docker.sock exists.' )
-
-                self._logger.error('CAUTION: REGISTRY NOT UPDATED! Is recomended to \
-                    manually delete your containers and the registry itself.')
-
-                sys.exit(-1)
-
-            except requests.exceptions.HTTPError as e:
-                self._logger.warning(e)
-                self._logger.info('Bad answer from server, probably this id doesn\'t'
-                    + 'exist anymore, removing from list.')
-
-                tmp_reg = self._container_registry
-                tmp_reg = [x for x in tmp_reg if x != id]
-                self._container_registry = tmp_reg
-
-        self._registry_file_update()
+        self._list_container(True) # Update jsonlist
+        # for id in self._container_registry:
+        for i in range(0, len(self._jsoncontlist)):
+            status = self._jsoncontlist[i]['Status']
+            if not status or 'Exited' in status:
+                id = self._jsoncontlist[i]['Id']
+                try:
+                    contlabel = self._jsoncontlist[i]['Labels']['container.label']
+                    if contlabel == 'worker-node':
+                        ## Exited and owned.
+                        try:
+                            request = self._session.delete('http+unix://' \
+                                + self._socket_path + '/containers/' + id)
+                            request.raise_for_status()
+                        except requests.exceptions.HTTPError as e:
+                            self._logger.debug('HTTPError: ' + request.content)
+                            self._logger.error(e)
+                            self._logger.warning('It couldn\'t be possibile to delete '
+                                + ' container: ' + id)
+                except:
+                    pass
 
 #=========================================================================================
 def container_respawner(cont_num):
-    manager = ContainerManager()
+    manager = ContainerPoolManager()
     manager._setup_logger()
     manager._setup_from_conf('conf/manager.conf')
     while(1):
-        time.sleep(10)
         owning = manager._list_container()
 
         if (owning < cont_num):
