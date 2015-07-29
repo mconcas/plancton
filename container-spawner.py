@@ -13,10 +13,8 @@ from configobj import ConfigObj
 try:
     import requests_unixsocket, requests.exceptions
 except ImportError, e:
-    print 'Couldn\'t find the requests_unixsocket module. '
-    + 'Please check that it is installed or, '
-    + 'at least, in the working directory. '
-    + str(e)
+    print 'Couldn\'t find the requests_unixsocket module. Please check the prereqs...'
+        + str(e)
 
     sys.exit(-1)
 
@@ -40,7 +38,7 @@ class ContainerManager(object):
             '[%(module)s.%(funcName)s] %(message)s'
         datefmt = '%Y-%m-%d %H:%M:%S'
         log_file_handler = logging.handlers.RotatingFileHandler(self._logpath, mode='a',
-            maxBytes=1000000, backupCount=0)
+            maxBytes=1000000, backupCount=3)
         log_file_handler.setFormatter(logging.Formatter(format, datefmt))
         log_file_handler.doRollover()
         self._logger.setLevel(10)
@@ -51,20 +49,19 @@ class ContainerManager(object):
     # @return nothing
     def _setup_from_conf(self, file_path):
         ## This function is called ONCE at the startup, it loads configurations and
-        #  backup files.
+        #  try to restore the container list from a backup file.
 
         self._logger.info('Loading cfg from: ' + file_path)
         self._config = ConfigObj(file_path)
         mancfg = 'Manager Configuration'
         logpath = self._config[mancfg]['LogPath']
         if not logpath == self._logpath:
-            print 'Overriding default configuration, setting logfile to:' + logpath
+            self._logger('Overriding default conf. setting logfile to:' + logpath)
         self._logpath = logpath
         self._socket_path = self._config[mancfg]['SocketPath']
         self._container_conf_file = self._config[mancfg]['ContainerConf']
 
-        ## For now hardcoded, since it cannot be safely (re)created, preventing a wrong
-        #  behaviour for this script.
+        ## ATM this is hardcoded.
         self._container_registry_file = '/tmp/container-manager.reg'
 
         # If any, recover from file.
@@ -301,13 +298,6 @@ class ContainerManager(object):
         Wipes out all the Created and Exited containers.
         """
 
-
-        ## For now i choose to query a new list, and match it with the registry
-        #  before reap out a container. In the future it could be that the reaper
-        #  will get the sentences list directly from local list or file list.
-        # request = self._session.get('http+unix://' + self._socket_path \
-        #     + '/containers/json?all=1')
-        # request.raise_for_status()
         self._logger.info('Reading from local registry list...')
         # listjson = json.loads(request.content)
         # for i in range(0, len(listjson)):
@@ -319,11 +309,6 @@ class ContainerManager(object):
 
                 jsonctnt = json.loads(request.content)
                 if not jsonctnt['State']['Running']:
-
-
-                # if not listjson[i]['Status'] or 'Exited' in listjson[i]['Status']:
-                #     id = str(listjson[i]['Id'])
-                #     if id in self._container_registry:
                      try:
                          request = self._session.delete('http+unix://' \
                              + self._socket_path + '/containers/' + id)
@@ -335,16 +320,7 @@ class ContainerManager(object):
                          tmp_reg = self._container_registry
                          tmp_reg = [x for x in tmp_reg if x != id]
                          self._container_registry = tmp_reg
-
-                         ## Synchronize the backup file.
-                         # tmp_list = []
-                         # with open(self._container_registry_file, 'r') as registry:
-                         #     tmp_list = registry.readlines()
-                         # with open(self._container_registry_file, 'w') as registry:
-                         #     for line in tmp_list:
-                         #         if line != id:
-                         #             registry.write(line)
-
+                         
                      except requests.exceptions.HTTPError as e:
                          self._logger.debug('HTTPError: ' + request.content)
                          self._logger.error(e)

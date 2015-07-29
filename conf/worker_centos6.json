@@ -1,10 +1,10 @@
 {
-    "Hostname": "",
-    "Domainname": "",
+    "Hostname": "centos6-worker",
+    "Domainname": "to.infn.it",
     "User": "",
     "AttachStdin": false,
-    "AttachStdout": true,
-    "AttachStderr": true,
+    "AttachStdout": false,
+    "AttachStderr": false,
     "Tty": false,
     "OpenStdin": false,
     "StdinOnce": false,
@@ -12,13 +12,11 @@
     "Cmd": [
       "/bin/sleep",
       "60"
-   ],
+    ],
     "Image": "mconcas/parrotcvmfs-autobuild:centos6-autobuild",
     "WorkingDir": "/",
     "NetworkDisabled": false,
-    "ExposedPorts": {
-            "22/tcp": {}
-    },
+    "ExposedPorts": {},
     "HostConfig": {
       "Memory": 0,
       "MemorySwap": 0,
