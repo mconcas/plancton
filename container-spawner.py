@@ -26,7 +26,7 @@ class ContainerManager(object):
         self._logger = logging.getLogger(self._name)
 
         ## Can be overridden by manual configuration.
-        self._logpath = '/tmp/dev-container-manager.log'
+        self._logpath = '/tmp/container-manager.log'
         self._session = requests_unixsocket.Session()
         self._container_registry = []
 
