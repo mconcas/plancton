@@ -1,4 +1,5 @@
-# plancton
+# plancton 
+[ Thanks G. for providing the name]
 ## Python script that keeps alive a specified number of running containers on the docker host.
 Prerequisites:
   * requests_unixsocket:
