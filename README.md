@@ -1,4 +1,4 @@
-# container-spawner
+# plancton
 ## Python script that keeps alive a specified number of running containers on the docker host.
 Prerequisites:
   * requests_unixsocket:
