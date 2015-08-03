@@ -2,17 +2,18 @@
 # -*- coding: utf-8 -*-
 
 import os, sys, time
+import errno
 import json
 import logging, logging.handlers
 import requests_unixsocket, requests, requests.exceptions as reqexc
 import base64
-# from configobj import ConfigObj
+from datetime import datetime
 
 class ContainerPoolManager(object):
     __version__ = '0.0.2'
 
     def __init__(self, logpath='/tmp/container-pool-manager.log'):
-        self._name = 'ContainerPoolManager'
+        self._name = 'CPMngr' ## ContainerPoolManager truncated for a lighter logging.
         self._logger = logging.getLogger(self._name)
 
         ## Can be overridden by manual configuration.
@@ -33,7 +34,7 @@ class ContainerPoolManager(object):
             + '[%(module)s.%(funcName)s] %(message)s'
         datefmt = '%Y-%m-%d %H:%M:%S'
         log_file_handler = logging.handlers.RotatingFileHandler(self._logpath, mode='a',
-            maxBytes=1000000, backupCount=0)
+            maxBytes=1000000, backupCount=5)
         log_file_handler.setFormatter(logging.Formatter(format, datefmt))
         log_file_handler.doRollover()
         self._logger.setLevel(10)
@@ -189,6 +190,9 @@ class ContainerPoolManager(object):
         """
         This function wraps some requests and starts a container by getting its ID.
         """
+
+        self._initialize()
+
         try:
             unixrequest = self._unix_session.post('http+unix://' + self._socket_path \
                 + '/containers/' + id + '/start')
@@ -202,31 +206,53 @@ class ContainerPoolManager(object):
     ## Garbage collector.
     #
     #  @return nothing.
-    def _container_cleaner(self):
+    def _container_cleaner(self, ttl_threshold=12*60*60):
         """
         Wipes out all the Created and Exited containers.
+        If a container has been «RUNNING» for more than 12h (overrideable value) it
+        would be cleared as well.
         """
 
         self._list_containers(True) # Update self._jscontlist
         for i in range(0, len(self._jscontlist)):
             status = self._jscontlist[i]['Status']
+            id = self._jscontlist[i]['Id']
             if not status or 'Exited' in status:
                 try:
                     contlabel = self._jscontlist[i]['Labels']['container.label']
                     if contlabel == 'worker-node':
                         ## Exited and owned.
-                        id = self._jscontlist[i]['Id']
                         try:
                             unixrequest = self._unix_session.delete('http+unix://' \
                                 + self._socket_path + '/containers/' + id)
                             unixrequest.raise_for_status()
-                            self._logger.debug('Removed ' + id + ' successfully')
+                            self._logger.debug('Removed ' + id + ' successfully.')
                         except reqexc.HTTPError as e:
                             self._logger.debug('HTTPError: ' + unixrequest.content)
                             self._logger.error(e)
                             self._logger.warning('Couldn\'t delete: ' + id)
                 except:
                     pass
+            else: ## Running container.
+                try:
+                    unixrequest = self._unix_session.get('http+unix://' \
+                        + self._socket_path + '/containers/' + id + '/json')
+                    startedat = json.loads(unixrequest.content)['State']['StartedAt']
+                    statobj = datetime.strptime(str(startedat).split('.')[0], \
+                        "%Y-%m-%dT%H:%M:%S")
+
+                    # (**) Offset due to an unsolved bug/issue
+                    delta = time.time() - time.mktime(statobj.timetuple()) - 7200 ## (**)
+                    if delta > ttl_threshold:
+                        try:
+                            self._logger.info('Killing %s: exceeded the ttl_thresh' % id )
+                            unixrequest = self._unix_session.post('http+unix://' \
+                                + self._socket_path + '/containers/' + id + '/kill')
+                        except Exception as e:
+                            self._logger.error(e)
+
+                except Exception as e:
+                    self._logger.error(e)
 
 #=========================== dummy function ==============================================
 def dummy_container_respawner(cont_num):
