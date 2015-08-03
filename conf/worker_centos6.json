@@ -11,7 +11,7 @@
     "Env": null,
     "Cmd": [
       "/bin/sleep",
-      "60"
+      "200"
     ],
     "Image": "mconcas/centos6-autobuild-container:latest",
     "WorkingDir": "/",
