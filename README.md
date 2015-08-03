@@ -1,6 +1,6 @@
 # plancton
-[Thanks G. for providing the name]
-## Python script that keeps alive a specified number of running containers on the docker host.
+
+## A Python script that keeps alive a specified number of running containers on the docker host.
 Prerequisites:
   * requests_unixsocket:
   
@@ -13,3 +13,7 @@ It provides:
   * Delimited area of competence: it would never try to interact with user-owned other containers.
   * Configuration: loads manager.conf and container.json for easy-to-use configuration.
   * User permissions (at the moment)
+
+
+
+[Thanks G. for suggesting the name]

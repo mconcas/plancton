@@ -80,7 +80,7 @@ class ContainerPoolManager(object):
     #  docker during the build phase.
     #
     #  @return the list length.
-    def _list_containers(self, taglabel='worker-node', quiet=False):
+    def _list_containers(self, quiet=False, taglabel='worker-node'):
         """
         Function that wraps some requests, prints container list to a log file
         and returns the number of running containers found with a specific tag.
@@ -149,8 +149,8 @@ class ContainerPoolManager(object):
                 data=json.dumps(self._json_cconfig), headers=headers)
 
             unixrequest.raise_for_status()
-            self._logger.debug('Successfully created: '          \
-                + str(unixrequest.content))
+            self._logger.debug('Successfully created: ' \
+                + str(unixrequest.content).rstrip('\n'))
 
             c_id = str(json.loads(unixrequest.content)['Id'])
 
@@ -163,8 +163,21 @@ class ContainerPoolManager(object):
             self._logger.error(e)
 
         except reqexc.HTTPError as e:
-            self._logger.debug('Bad response from server.')
-            self._logger.error(e)
+            self._logger.warning(e)
+            self._logger.info('Local image %s is not present or outdated, repulling...' \
+                % self._json_cconfig['Image'])
+
+
+            try:
+                self._logger.info('Pulling image: ' + self._json_cconfig['Image'] )
+                unixrequest = self._unix_session.post('http+unix://'
+                    + self._socket_path + '/images/create?fromImage='
+                    + self._json_cconfig['Image'])
+                self._build_container()
+                unixrequest.raise_for_status()
+
+            except Exception as e:
+                self._logger.error(e)
 
         except ValueError as e:
             self._logger.debug('JSON ValueError: parser error.')

@@ -13,7 +13,7 @@
       "/bin/sleep",
       "60"
     ],
-    "Image": "mconcas/parrotcvmfs-autobuild:centos6-autobuild",
+    "Image": "mconcas/centos6-autobuild-container:latest",
     "WorkingDir": "/",
     "NetworkDisabled": false,
     "ExposedPorts": {},
