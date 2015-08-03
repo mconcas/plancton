@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import os, sys, time
-import errno
 import json
 import logging, logging.handlers
 import requests_unixsocket, requests, requests.exceptions as reqexc
