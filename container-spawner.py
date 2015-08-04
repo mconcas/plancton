@@ -28,7 +28,6 @@ class ContainerPoolManager(object):
 
     ## _logger_setup: sets up logs.
     #
-    # @return nothing
     def _logger_setup(self):
         format = '%(asctime)s %(name)s %(levelname)s ' \
             + '[%(module)s.%(funcName)s] %(message)s'
@@ -42,7 +41,6 @@ class ContainerPoolManager(object):
 
     ## _setup_from_conf: sets up from configfile.
     #
-    # @return nothing
     def _initialize(self):
         '''
         Function usually called at the startup.
@@ -78,8 +76,6 @@ class ContainerPoolManager(object):
     # 
     #  List the running containers having a specified label, that is stored by
     #  docker during the build phase.
-    #
-    #  @return the list length.
     def _list_containers(self, quiet=False, taglabel='worker-node'):
         """
         Function that wraps some requests, prints container list to a log file
@@ -137,13 +133,23 @@ class ContainerPoolManager(object):
 
     ## Create a container following from a json cfg file.
     #
-    # @return nothing.
+
     def _build_container(self):
         """
         This function creates a container. It returns, in case of success, the id.
         """
         headers = {'content-type':'application/json', 'Accept':'text/plain'}
         try:
+            try:
+                self._logger.info('Pulling image: ' + self._json_cconfig['Image'] )
+                unixrequest = self._unix_session.post('http+unix://'
+                    + self._socket_path + '/images/create?fromImage='
+                    + self._json_cconfig['Image'])
+                unixrequest.raise_for_status()
+
+            except Exception as e:
+                self._logger.error(e)
+
             unixrequest = self._unix_session.post('http+unix://' \
                 + self._socket_path + '/containers/create',      \
                 data=json.dumps(self._json_cconfig), headers=headers)
@@ -164,20 +170,8 @@ class ContainerPoolManager(object):
 
         except reqexc.HTTPError as e:
             self._logger.warning(e)
-            self._logger.info('Local image %s is not present or outdated, repulling...' \
-                % self._json_cconfig['Image'])
-
-
-            try:
-                self._logger.info('Pulling image: ' + self._json_cconfig['Image'] )
-                unixrequest = self._unix_session.post('http+unix://'
-                    + self._socket_path + '/images/create?fromImage='
-                    + self._json_cconfig['Image'])
-                self._build_container()
-                unixrequest.raise_for_status()
-
-            except Exception as e:
-                self._logger.error(e)
+            # self._logger.info('Local image %s is not present or outdated, repulling...' \
+                # % self._json_cconfig['Image'])
 
         except ValueError as e:
             self._logger.debug('JSON ValueError: parser error.')
@@ -185,7 +179,7 @@ class ContainerPoolManager(object):
 
     ## Start a created container.
     #
-    # @return nothing
+
     def _start_container(self, id):
         """
         This function wraps some requests and starts a container by getting its ID.
@@ -205,7 +199,6 @@ class ContainerPoolManager(object):
 
     ## Garbage collector.
     #
-    #  @return nothing.
     def _container_cleaner(self, ttl_threshold=12*60*60):
         """
         Wipes out all the Created and Exited containers.
@@ -238,11 +231,10 @@ class ContainerPoolManager(object):
                     unixrequest = self._unix_session.get('http+unix://' \
                         + self._socket_path + '/containers/' + id + '/json')
                     startedat = json.loads(unixrequest.content)['State']['StartedAt']
-                    statobj = datetime.strptime(str(startedat).split('.')[0], \
-                        "%Y-%m-%dT%H:%M:%S")
-
-                    # (**) Offset due to an unsolved bug/issue
+                    statobj = datetime.strptime(str(startedat)[:-11], "%Y-%m-%dT%H:%M:%S")
+                    ## (**) This merely sets a workaround to an issue with Docker's time.
                     delta = time.time() - time.mktime(statobj.timetuple()) - 7200 ## (**)
+
                     if delta > ttl_threshold:
                         try:
                             self._logger.info('Killing %s: exceeded the ttl_thresh' % id )
@@ -253,6 +245,7 @@ class ContainerPoolManager(object):
 
                 except Exception as e:
                     self._logger.error(e)
+
 
 #=========================== dummy function ==============================================
 def dummy_container_respawner(cont_num):
