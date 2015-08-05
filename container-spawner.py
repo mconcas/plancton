@@ -18,7 +18,7 @@ class ContainerPoolManager(object):
 
         ## Can be overridden by manual configuration.
         self._logpath = logpath
-
+        
         ## *requests sessions
         self._unix_session = requests_unixsocket.Session()
         self._https_session = requests.Session()
