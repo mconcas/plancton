@@ -1,1 +1,4 @@
 scratch
+*.pyc
+.DS_Store
+
