@@ -11,6 +11,7 @@ import logging, logging.handlers
 import base64
 import string
 import random
+import time
 
 
 
@@ -30,6 +31,8 @@ class Plancton(Daemon):
     def __init__(self, name, pidfile, logdir, sock_path='unix://var/run/docker.sock'):
         super(Plancton, self).__init__(name, pidfile)
         self._logdir = logdir
+        self._start_time = self._last_update_time = time.time()
+
 
         ## requests session needed by GitHub APIs.
         self._https_session = requests.Session()
@@ -93,12 +96,22 @@ class Plancton(Daemon):
                 + ' Is the docker daemon running? Check if /var/run/docker.sock exists.')
             self.logctl.error(e)
 
+    def PullImage(self, repo=None, tagname='latest'):
+        if not repo:
+            repository, tag = str(self._conf_container_js['Image']).split(':')
+        else:
+            repository = repo
+            tag = tagname
+
+        try:
+            self.logctl.info('Pulling img: %s, tag: %s' % (repository, tag))
+            self._client.pull(repository,tag)
+        except Exception as e:
+            self.logctl.error(e)
+
+
     def CreateContainer(self, cname_prefix, pull_img=True):
         if self._conf_container_js:
-            if pull_img:
-                repository, tag = str(self._conf_container_js['Image']).split(':')
-                self.logctl.info('Pulling img: %s, tag: %s' % (repository, tag))
-                self._client.pull(repository,tag)
             try:
                 self.logctl.debug('Creating container from img...')
                 cname = cname_prefix+'-'+''.join(random.SystemRandom().choice(string.ascii_uppercase + \
@@ -127,7 +140,6 @@ class Plancton(Daemon):
                 self.logctl.info('Listing below:')
                 for i in range(0, len(jdata)):
                     try:
-                        # If the name contains the 'name'
                         if name in str(jdata[i]['Names']):
                             self._owned_containers+=1
                             owner = 'plancton-agent'
@@ -167,7 +179,7 @@ class Plancton(Daemon):
                 try:
                     jdata2 = self._client.inspect_container(id)
                     startedat = jdata2['State']['StartedAt']
-                    statobj = datetime.strptime(str(startedat)[:-11], "%Y-%m-%dT%H:%M:%S")
+                    statobj = datetime.strptime(str(startedat)[:19], "%Y-%m-%dT%H:%M:%S")
                     ## (**) This merely sets a workaround to an issue with Docker's time.
                     delta = time.time() - time.mktime(statobj.timetuple()) - 7200 ## (**)
                     if delta > ttl_thresh_secs:
@@ -188,24 +200,9 @@ class Plancton(Daemon):
                 id = jdata[i]['Id']
                 try:
                     self._client.remove_container(id, force=True)
-                    self.logctl.warning('\t [ ID: %s out! ' % id )
+                    self.logctl.warning('\t > container_id: %s out! ' % id )
                 except Exception as e:
                     self.logctl.error(e)
-
-
-
-    def run(self):
-        self.logctl.info('run called...')
-        while(1):
-            owning = self.ListContainers()
-            if (owning < 5):
-                self.DeployContainer()
-            self.ControlContainers()
-
-
-
-
-
 
     ## Action to perform when some exit signal is received.
     #
@@ -213,86 +210,47 @@ class Plancton(Daemon):
     def onexit(self):
         self.logctl.info('Termination requested: we will exit gracefully soon...')
         self._do_main_loop = False
-        self.JumpShip()
-        self.logctl.info('Plancton daemon exited gracefully. See you soon!')
+        try:
+            self.JumpShip()
+            self.logctl.info('Exited gracefully, see you soon.')
+            return True
+        except Exception as e:
+            self.logctl.error(e)
+            return False
 
-        return True
-#   ## Daemon's main loop: implements an event-based execution model.
-#   def main_loop(self):
-# 
-#     check_time = time.time()
-#     count = 0
-#     tot = len( self.st['event_queue'] )
-#     for evt in self.st['event_queue'][:]:
-# 
-#       # Extra params?
-#       if 'params' in evt:
-#         p = evt['params']
-#       else:
-#         p = []
-# 
-#       # Debug message
-#       count += 1
-#       self.logctl.debug('Event %d/%d in queue: action=%s when=%d (%d) params=%s' % \
-#         (count, tot, evt['action'], evt['when'], check_time-evt['when'], p))
-# 
-#       if evt['when'] <= check_time:
-#         r = None
-#         self.st['event_queue'].remove(evt)
-# 
-#         # Actions
-#         if evt['action'] == 'check_vms':
-#           r = self.check_vms(*p)
-#         elif evt['action'] == 'check_vm_errors':
-#           r = self.check_vm_errors(*p)
-#         elif evt['action'] == 'check_queue':
-#           r = self.check_queue(*p)
-#         elif evt['action'] == 'change_vms_allegedly_running':
-#           r = self.change_vms_allegedly_running(*p)
-#         elif evt['action'] == 'check_owned_instance':
-#           r = self.check_owned_instance(*p)
-# 
-#         if r is not None:
-#           self.st['event_queue'].append(r)
-# 
-# 
-#   ## Daemon's main function.
-#   #
-#   #  @return Exit code of the daemon: keep it in the range 0-255
-#   def run(self):
-# 
-#     self.SetupLogFiles()
-#     self.logctl.info('Running plancton v%s' % self.__version__)
-#     self._load_conf()
-#     self.load_owned_instances()
-#     self._load_batch_plugin()
-#     self._init_ec2()
-#     self._init_user_data()
-# 
-#     # Initial values for the internal state
-#     self.st = {
-#       'first_seen_above_threshold': -1,
-#       'workers_status': {},
-#       'vms_allegedly_running': 0,
-#       'event_queue': [
-#         {'action': 'check_vm_errors', 'when': 0},
-#         {'action': 'check_vms',       'when': 0},
-#         {'action': 'check_queue',     'when': 0}
-#       ]
-#     }
-# 
-#     # Schedule a sanity check for running instances as if they were just deployed
-#     self.logctl.info('Scheduling sanity check for owned instances in %s seconds: %s' % \
-#       (self.cf['elastiq']['estimated_vm_deploy_time_s'], self.owned_instances) )
-#     time_sched = time.time() + self.cf['elastiq']['estimated_vm_deploy_time_s']
-#     for inst in self.owned_instances:
-#       self.st['event_queue'].append({
-#         'action': 'check_owned_instance',
-#         'when': time_sched,
-#         'params': [ inst ]
-#       })
-# 
-#     while self._do_main_loop:
-#       self.main_loop()
-#       self.logctl.debug('Sleeping %d seconds' % self.cf['elastiq']['sleep_s']);
-#       time.sleep( self.cf[
+
+    ##  Daemon's main loop.
+    #   Perfroms an image pull/update at startup and every 'delta' seconds.
+    #   The APIs guarantee by their own that if the image is up-to-date it wouldn't
+    #   be re-downloaded, this way I want to reduce the requests number, though.
+    #   Moreover once the control is set one can schedule more features, like update-checks
+    #   for the cfg file, for the daemon itself and so on.
+    #   @return Nothing
+    def main_loop(self,w_containers_thresh=5,update_every=3600):
+        self.ControlContainers()
+        delta = time.time() - self._last_update_time
+        if (delta >= update_every):
+            self.PullImage()
+            self.GetOnlineConf()
+            self._last_update_time = time.time()
+
+        self.ListContainers()
+        if self._owned_containers <= w_containers_thresh:
+            self.DeployContainer()
+
+    ##  Daemon's main function.
+    #
+    #  @return Exit code of the daemon: keep it in the range 0-255
+    def run(self):
+        self.SetupLogFiles()
+        self.logctl.info('Running plancton v%s' % self.__version__)
+        self.GetOnlineConf()
+        self._do_main_loop = True
+        # At startup download online configuration.
+        self.PullImage()
+        self.GetSetupInfo()
+        while self._do_main_loop:
+            self.main_loop()
+
+        self.logctl.info('Exiting gracefully!')
+        return 0

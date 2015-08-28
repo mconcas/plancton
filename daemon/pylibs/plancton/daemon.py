@@ -264,9 +264,9 @@ class Daemon(object):
 
     ## Real exit handler.
     #
-    #  Calls the `onexit()` function, that must be overridden by subclasses, and exits the program if
-    #  it returns True. Exit signals are temporarily mapped to noop while handling one signal, and the
-    #  mapping is restored in case exiting is cancelled.
+    #  Calls the `onexit()` function, that must be overridden by subclasses, and exits the program
+    #  if it returns True. Exit signals are temporarily mapped to noop while handling one signal,
+    #  and the mapping is restored in case exiting is cancelled.
     def exitHandlerReal(self, signum, frame):
         self.trapExitSignals(self.exitHandlerNoOp)
         if self.onexit():
