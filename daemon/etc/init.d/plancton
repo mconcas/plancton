@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# plancton       Starts and stops the plancton container spawner.
+# plancton      Starts and stops the plancton container spawner.
 #
 # chkconfig:    2345 99 09
 # description:  Container spawner for a volounteer computing project.
@@ -136,96 +136,96 @@ function start() {
 
 # Stop plancton
 function stop() {
-  local ret
-  local lastMsg
+   local ret
+   local lastMsg
 
-  echo_begin "Stopping ${Prog}"
-  sudo -u "$planctonUser" planctonctl stop > /dev/null 2>&1
+   echo_begin "Stopping ${Prog}"
+   sudo -u "$planctonUser" planctonctl stop > /dev/null 2>&1
 
-  # note: query_status "fails" (1) if daemon is stoped: this is a success here
-  lastMsg=`query_status`
-  ret=$(( ! $? ))
+   # note: query_status "fails" (1) if daemon is stoped: this is a success here
+   lastMsg=`query_status`
+   ret=$(( ! $? ))
 
-  [[ $ret == 0 ]] && rm -f "$LockFile"
+   [[ $ret == 0 ]] && rm -f "$LockFile"
 
-  echo_end $ret "Stopping ${Prog}: ${lastMsg}"
+   echo_end $ret "Stopping ${Prog}: ${lastMsg}"
 
-  return $ret
+   return $ret
 }
 
 # Echo status
 function status() {
-  local ret
-  local lastMsg
+   local ret
+   local lastMsg
 
-  lastMsg=`query_status`
-  ret=$?
+   lastMsg=`query_status`
+   ret=$?
 
-  if [[ $ret == 0 ]] ; then
-    echo_success "$lastMsg"
-  else
-    echo_failure "$lastMsg"
-  fi
+   if [[ $ret == 0 ]] ; then
+      echo_success "$lastMsg"
+   else
+      echo_failure "$lastMsg"
+   fi
 
-  return $ret
+   return $ret
 }
 
 # Query status: echoes a message and returns 0 if running, nonzero if not
 function query_status() {
-  local ret
-  su "$planctonUser" -s /bin/sh -c 'exec planctonctl status' > /dev/null 2>&1
-  ret=$?
-  if [[ $ret == 0 ]] ; then
-    echo "${Prog} running with PID $(cat "$planctonPidFile")"
-  else
-    echo "${Prog} not running"
-  fi
-  return $ret
+   local ret
+   su "$planctonUser" -s /bin/sh -c 'exec planctonctl status' > /dev/null 2>&1
+   ret=$?
+   if [[ $ret == 0 ]] ; then
+      echo "${Prog} running with PID $(cat "$planctonPidFile")"
+   else
+      echo "${Prog} not running"
+   fi
+   return $ret
 }
 
 # Print configuration
 function print_conf() {
-  echo "Python     : $( which python ) ($( python --version 2>&1 ))"
-  echo "PYTHONPATH : ${PYTHONPATH}"
+   echo "Python     : $( which python ) ($( python --version 2>&1 ))"
+   echo "PYTHONPATH : ${PYTHONPATH}"
 }
 
 # Entry point
 case "$1" in
 
-  start)
-    start
-    exit $?
-  ;;
+   start)
+      start
+      exit $?
+   ;;
 
-  stop)
-    stop
-    exit $?
-  ;;
+   stop)
+      stop
+      exit $?
+   ;;
 
-  status)
-    status
-    exit $?
-  ;;
+   status)
+      status
+      exit $?
+   ;;
 
-  restart)
-    stop && start
-    exit $?
-  ;;
+   restart)
+      stop && start
+      exit $?
+   ;;
 
-  log)
-    status
-    [[ -e "$planctonLogFile" ]] && tail -f "$planctonLogFile"
-    exit $?
-  ;;
+   log)
+      status
+      [[ -e "$planctonLogFile" ]] && tail -f "$planctonLogFile"
+      exit $?
+   ;;
 
-  conf)
-    print_conf
-    exit $?
-  ;;
+   conf)
+      print_conf
+      exit $?
+   ;;
 
-  *)
-    echo "Usage: $Prog [start|stop|status|restart|log|conf]"
-    exit 1
-  ;;
+   *)
+      echo "Usage: $Prog [start|stop|status|restart|log|conf]"
+      exit 1
+   ;;
 
 esac

@@ -90,7 +90,7 @@ class Plancton(Daemon):
         # This is just a dummy check if the docker deamon is running.
         # System+Docker-setup informations are stored.
         try:
-            self._setupinfo = self._client.info()
+            return self._setupinfo = self._client.info()
         except requests.exceptions.ConnectionError as e:
             self.logctl.error('Connection Error: couldn\'t find a proper socket to attach. '
                 + ' Is the docker daemon running? Check if /var/run/docker.sock exists.')
