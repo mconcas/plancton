@@ -32,12 +32,13 @@ class Plancton(Daemon):
         super(Plancton, self).__init__(name, pidfile)
         self._logdir = logdir
         self._start_time = self._last_update_time = time.time()
-
+        self._list_up_to_date = False
 
         ## requests session needed by GitHub APIs.
         self._https_session = requests.Session()
         self._conf_container_js = None
         self._sockpath = sock_path
+        self._containers = {}
 
 
     ## Setup use of logfiles, rotated and deleted periodically.
@@ -90,7 +91,9 @@ class Plancton(Daemon):
         # This is just a dummy check if the docker deamon is running.
         # System+Docker-setup informations are stored.
         try:
-            return self._setupinfo = self._client.info()
+            self._setupinfo = self._client.info()
+            return self._setupinfo
+
         except requests.exceptions.ConnectionError as e:
             self.logctl.error('Connection Error: couldn\'t find a proper socket to attach. '
                 + ' Is the docker daemon running? Check if /var/run/docker.sock exists.')
@@ -127,39 +130,51 @@ class Plancton(Daemon):
         try:
             self._client.start(container=id)
             self.logctl.debug('Starting container with id: %s' % str(id))
+            # make an inspect call to obtain container pid, in order to ease the process monitoring.
+            cont_dict = self._client.inspect_container(id)
+            cpid = cont_dict['State']['Pid']
+            self._containers[id] = cpid
+            self.logctl.debug('\t > %s < is running with pid : %s' % (id, cpid))
+
         except Exception as e:
             self.logctl.error(e)
 
+
+
+
     def ListContainers(self, quiet=False, name='plancton-slave-'):
         try:
-            self.logctl.info('Checking container list...')
+            if not quiet:
+                self.logctl.debug('Checking container list...')
             jdata = self._client.containers(all=True)
-            self.logctl.debug('Found %r container(s) in the whole Docker pool.' % len(jdata))
+            if not quiet:
+                self.logctl.debug('Found %r container(s) in the whole Docker pool.' % len(jdata))
             self._owned_containers = 0
             if not quiet:
-                self.logctl.info('Listing below:')
-                for i in range(0, len(jdata)):
-                    try:
-                        if name in str(jdata[i]['Names']):
-                            self._owned_containers+=1
-                            owner = 'plancton-agent'
-                        else:
-                            owner = 'others        '
-                        status = jdata[i]['Status']
-                        if not status:
-                            status = 'Created (Not Running)'
+                self.logctl.info('Listing existent containers:')
+            for i in range(0, len(jdata)):
+                try:
+                    if name in str(jdata[i]['Names']):
+                        self._owned_containers+=1
+                        owner = 'plancton-agent'
+                    else:
+                        owner = 'others        '
+                    status = jdata[i]['Status']
+                    if not status:
+                        status = 'Created (Not Running)'
+                    if not quiet:
                         self.logctl.info('\t [ ID: %s ] [ OWNER: %s ] [ STATUS: %s ] ' \
-                            % (jdata[i]['Id'], owner, status))
-                    except Exception as e:
+                            % (jdata[i]['Id'][:12], owner, status))
+                except Exception as e:
                         self.logctl.error(e)
 
-                self.logctl.info('Found %r owned container(s).' % self._owned_containers)
             return self._owned_containers
         except Exception as e:
             self.logctl.error(e)
 
     def DeployContainer(self, cname='plancton-slave', pull=True):
         self.StartContainer(self.CreateContainer(cname, pull))
+        self._list_up_to_date = False
 
     def ControlContainers(self, dominion='plancton-slave', ttl_thresh_secs=12*60*60):
         jdata = self._client.containers(all=True)
@@ -180,6 +195,7 @@ class Plancton(Daemon):
                     jdata2 = self._client.inspect_container(id)
                     startedat = jdata2['State']['StartedAt']
                     statobj = datetime.strptime(str(startedat)[:19], "%Y-%m-%dT%H:%M:%S")
+                    
                     ## (**) This merely sets a workaround to an issue with Docker's time.
                     delta = time.time() - time.mktime(statobj.timetuple()) - 7200 ## (**)
                     if delta > ttl_thresh_secs:
@@ -200,7 +216,7 @@ class Plancton(Daemon):
                 id = jdata[i]['Id']
                 try:
                     self._client.remove_container(id, force=True)
-                    self.logctl.warning('\t > container_id: %s out! ' % id )
+                    self.logctl.warning('\t > container id: %s out! ' % id )
                 except Exception as e:
                     self.logctl.error(e)
 
@@ -233,8 +249,15 @@ class Plancton(Daemon):
             self.PullImage()
             self.GetOnlineConf()
             self._last_update_time = time.time()
+        # If statement just to avoid continuously spamming into logfile. Thus only when an actual
+        # modification is performed it report a new list.
+        if not self._list_up_to_date:
+            self.ListContainers(quiet=False)
+            self._list_up_to_date = True
+        else:
+            self.ListContainers(quiet=True)
+            self._list_up_to_date = True
 
-        self.ListContainers()
         if self._owned_containers <= w_containers_thresh:
             self.DeployContainer()
 
