@@ -26,25 +26,58 @@ class Plancton(Daemon):
     #  @param name        Daemon name
     #  @param pidfile     File where PID is written
     #  @param logdir      Directory with logfiles (rotated)
-    #  @param sock_path   Unix socket exposed by docker
+    #  @param socket      Unix socket exposed by docker
+    #  @param url         GitHub conf repository, we are currently using GitHub API
 
-    def __init__(self, name, pidfile, logdir, sock_path='unix://var/run/docker.sock'):
+    def __init__(self, name, pidfile, logdir, socket='unix://var/run/docker.sock',
+            url='https://api.github.com/repos/mconcas/plancton/contents/conf/worker_centos6.json'):
+
         super(Plancton, self).__init__(name, pidfile)
         self._logdir = logdir
+        self.sockpath = socket
+        self.cfg_url = url
+
         self._start_time = self._last_update_time = time.time()
+
+        # up-to-date flag.
         self._list_up_to_date = False
 
-        ## requests session needed by GitHub APIs.
+        # Requests session needed by GitHub APIs.
         self._https_session = requests.Session()
-        self._conf_container_js = None
-        self._sockpath = sock_path
+
+        # docker client
+        self.docker_client = Client(base_url=self.sockpath)
+
+        # json container settings
+        self._cont_config = None
+
+        # Internal status dictionary.
+        self._int_st= {
+
+            'system'     : {},
+            'daemon'     : {},
+            'containers' : {}
+
+        }
+        # Internal dict lock
+        self._int_lock_state
+
         self._containers = {}
 
 
+    def safexec(self, func):
+        def lockwrap(*args, **kwargs):
+            if self._int_lock_state:
+                return func(*args, **kwargs)
+            else:
+                time.sleep(1)
+                return lockwrap(*args, **kwargs)
+        return lockwrap
     ## Setup use of logfiles, rotated and deleted periodically.
     #
     #  @return Nothing is returned
     def SetupLogFiles(self):
+
         if not os.path.isdir(self._logdir):
             os.mkdir(self._logdir, 0700)
         else:
@@ -61,92 +94,139 @@ class Plancton(Daemon):
         self.logctl.setLevel(10)
         self.logctl.addHandler(log_file_handler)
 
-
     ## Downloads the configuration file of a working container.
     #
-    #  @return Nothing is returned
-    def GetOnlineConf(self,
-        cfg_url='https://api.github.com/repos/mconcas/plancton/contents/conf/worker_centos6.json'):
+    #  @return True if the request sucess, False otherwise.
+    def GetOnlineConf(self):
 
-        # docker client
-        self._client = Client(base_url=self._sockpath)
         try:
-            httpsrequest = self._https_session.get(cfg_url)
-
-            # Get a base64 string containing the container json configuration.
-            # If the string is non-empty decode the json content.
-            enccfg = json.loads(httpsrequest.content)['content']
+            httpsreq = self._https_session.get(self.cfg_url)
+            enccfg = json.loads(httpsreq.content)['content']
             if enccfg:
-                self._conf_container_js = json.loads(base64.b64decode(enccfg))
+                self._cont_config = json.loads(base64.b64decode(enccfg))
             else:
                 self.logctl.warning('Empty cfg. string, skipping online initialization...')
-            httpsrequest.raise_for_status()
+            httpsreq.raise_for_status()
+
+            return True
 
         except Exception as e:
-
-            self.logctl.error('Failed to obtain configuration online, skipping...')
+            self.logctl.error('Failed to obtain online configuration, skipping...')
             self.logctl.error(e)
 
+            return False
+
+    ## Just a dummy check if the docker deamon is running.
+    #
+    #  @return True if the request sucess, False otherwise.
     def GetSetupInfo(self):
-        # This is just a dummy check if the docker deamon is running.
-        # System+Docker-setup informations are stored.
+
         try:
-            self._setupinfo = self._client.info()
-            return self._setupinfo
+            self._int_st['system'] = self.docker_client.info()
+
+            return True
 
         except requests.exceptions.ConnectionError as e:
             self.logctl.error('Connection Error: couldn\'t find a proper socket to attach. '
                 + ' Is the docker daemon running? Check if /var/run/docker.sock exists.')
             self.logctl.error(e)
 
+            return False
+
+    ## Fetch a specified image from a trusted registry getting image:tag from repo,tagname args or
+    #  as a default, from the conf. json; if the current image is already up-to-date it continues.
+    #
+    #  @return True if the request sucess, False otherwise.
     def PullImage(self, repo=None, tagname='latest'):
+
         if not repo:
-            repository, tag = str(self._conf_container_js['Image']).split(':')
+            repository, tag = str(self._cont_config['Image']).split(':')
         else:
             repository = repo
             tag = tagname
 
         try:
-            self.logctl.info('Pulling img: %s, tag: %s' % (repository, tag))
-            self._client.pull(repository,tag)
+            self.logctl.info('Pulling repository:tag %s:%s' % (repository, tag))
+            self.docker_client.pull(repository,tag)
+
+            return True
+
         except Exception as e:
             self.logctl.error(e)
 
+            return False
 
-    def CreateContainer(self, cname_prefix, pull_img=True):
-        if self._conf_container_js:
-            try:
-                self.logctl.debug('Creating container from img...')
-                cname = cname_prefix+'-'+''.join(random.SystemRandom().choice(string.ascii_uppercase + \
-                    string.digits + string.ascii_lowercase) for _ in range(6))
-                return self._client.create_container_from_config(self._conf_container_js,\
-                    cname)
-            except Exception as e:
-                self.logctl.error('Couldn\'t be able to create the container...')
-                self.logctl.error(e)
+    ## Create a container from a given image, pull it eventually. Created containers need to be
+    #  started.
+    #
+    ## @return the container id if the request sucess, None if an exception is raised.
+    def CreateContainerWithName(self, jconfig, cname_prefix):
 
-    def StartContainer(self, container):
-        id = container['Id']
         try:
-            self._client.start(container=id)
-            self.logctl.debug('Starting container with id: %s' % str(id))
-            # make an inspect call to obtain container pid, in order to ease the process monitoring.
-            cont_dict = self._client.inspect_container(id)
+            cname = cname_prefix
+                + '-'
+                + ''.join(random.SystemRandom().choice( string.ascii_uppercase
+                + string.digits
+                + string.ascii_lowercase) for _ in range(6))
+
+            self.logctl.debug('Creating container with name %s. ' % cname_prefix)
+            tmpcont = self.docker_client.create_container_from_config( jconfig )
+
+            self.logctl.debug('Registering it to my internal dictionary. ')
+            self._int_st['containers'][tmpcont['Id']]['name'] = 'cname'
+            self._int_st['containers'][tmpcont['Id']]['status'] = 'created'
+
+            return tmpcont
+
+        except Exception as e:
+            self.logctl.error('Couldn\'t create such container! ')
+            self.logctl.error(e)
+
+            return False
+
+    ## Start a created container. Perform a pid inspection and return it if the container is
+    #  actually running. The «container» argument is a dictionary with an 'Id' : 'somecoolhash'
+    #  key : value couple.
+    #
+    # @return
+    def StartContainer(self, container):
+
+        try:
+            self.docker_client.start(container=container['Id'])
+            self.logctl.debug('Starting container with id: %s' % str(container['Id']))
+
+            # make an inspect call to obtain container pid, in order to ease the monitoring.
+            cont_dict = self.docker_client.inspect_container(container['Id'])
             cpid = cont_dict['State']['Pid']
-            self._containers[id] = cpid
-            self.logctl.debug('\t > %s < is running with pid : %s' % (id, cpid))
+            self._containers[container['Id']] = cpid
+            self.logctl.debug('\t > %s < is running with pid : %s' % (container['Id'], cpid))
+
+            return cpid
 
         except Exception as e:
             self.logctl.error(e)
 
 
 
+    def CheckRunningContainers(self, name='plancton-slave-'):
+        # First start or empty internal state.
+        if not self._int_st:
+            self.logctl.debug('Empty internal dict found, performing a check...')
+            jdata = self.docker_client.containers(all=True)
+
+            # Loop over all found containers and filter the owned.
+            for i in range(0, len(jdata)):
+                try:
+                    if name in str(jdata[i]['Names']):
+                        # Ok, it's a container of mines.
+                        # Check running state.
+                        self._int_st['containers'][jdata[i]['Id']] = { 'name' : }
 
     def ListContainers(self, quiet=False, name='plancton-slave-'):
         try:
             if not quiet:
                 self.logctl.debug('Checking container list...')
-            jdata = self._client.containers(all=True)
+            jdata = self.docker_client.containers(all=True)
             if not quiet:
                 self.logctl.debug('Found %r container(s) in the whole Docker pool.' % len(jdata))
             self._owned_containers = 0
@@ -173,11 +253,11 @@ class Plancton(Daemon):
             self.logctl.error(e)
 
     def DeployContainer(self, cname='plancton-slave', pull=True):
-        self.StartContainer(self.CreateContainer(cname, pull))
+        self.StartContainer(self.CreateContainerWithName(cname, self._cont_config))
         self._list_up_to_date = False
 
     def ControlContainers(self, dominion='plancton-slave', ttl_thresh_secs=12*60*60):
-        jdata = self._client.containers(all=True)
+        jdata = self.docker_client.containers(all=True)
         for i in range(0, len(jdata)):
             status = jdata[i]['Status']
             id = jdata[i]['Id']
@@ -185,23 +265,23 @@ class Plancton(Daemon):
                 if dominion in str(jdata[i]['Names']):
                     ## Exited and owned.
                     try:
-                        self._client.remove_container(id)
+                        self.docker_client.remove_container(id)
                         self.logctl.debug('Removed %s successfully.' % id)
                     except Exception as e:
                         self.logctl.error(e)
 
             else: ## Running container.
                 try:
-                    jdata2 = self._client.inspect_container(id)
+                    jdata2 = self.docker_client.inspect_container(id)
                     startedat = jdata2['State']['StartedAt']
                     statobj = datetime.strptime(str(startedat)[:19], "%Y-%m-%dT%H:%M:%S")
-                    
+
                     ## (**) This merely sets a workaround to an issue with Docker's time.
                     delta = time.time() - time.mktime(statobj.timetuple()) - 7200 ## (**)
                     if delta > ttl_thresh_secs:
                         try:
                             self.logctl.info('Killing %s since it exceeded the ttl_thresh' % id )
-                            self._client.remove_container(id, force=True)
+                            self.docker_client.remove_container(id, force=True)
                         except Exception as e:
                             self.logctl.error(e)
 
@@ -210,12 +290,12 @@ class Plancton(Daemon):
 
     def JumpShip(self, dominion='plancton-slave'):
         self.logctl.warning('Every man for himself, abandon ship!')
-        jdata = self._client.containers(all=True)
+        jdata = self.docker_client.containers(all=True)
         for i in range(0, len(jdata)):
             if dominion in str(jdata[i]['Names']):
                 id = jdata[i]['Id']
                 try:
-                    self._client.remove_container(id, force=True)
+                    self.docker_client.remove_container(id, force=True)
                     self.logctl.warning('\t > container id: %s out! ' % id )
                 except Exception as e:
                     self.logctl.error(e)
