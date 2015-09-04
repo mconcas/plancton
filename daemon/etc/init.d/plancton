@@ -186,7 +186,7 @@ function query_status() {
 # Print configuration
 function print_conf() {
    echo "Python     : $( which python ) ($( python --version 2>&1 ))"
-   echo "PYTHONPATH : ${PYTHONPATH}"
+   # echo "PYTHONPATH : ${PYTHONPATH}"
 }
 
 # Entry point

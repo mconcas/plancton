@@ -3,6 +3,7 @@
 # -*- coding: utf-8 -*-
 
 import psutil
+import pprint
 
 class ResourcesMonitor():
     def __init__(self):
@@ -41,4 +42,6 @@ class ResourcesMonitor():
         return systat
 
 rm = ResourcesMonitor()
-print rm._system_status
+# print rm._system_status
+pp = pprint.PrettyPrinter(indent=4)
+pp.pprint(rm._system_status)

@@ -17,7 +17,10 @@ from daemon import Daemon
 class Plancton(Daemon):
 
     ## Current version of plancton
-    __version__ = '0.0.1'
+    __version__ = '0.0.2'
+
+    # Base policies dictionary
+    self._policies = {}
 
     ## Constructor.
     #
@@ -26,7 +29,6 @@ class Plancton(Daemon):
     #  @param logdir      Directory with logfiles (rotated)
     #  @param socket      Unix socket exposed by docker
     #  @param url         GitHub conf repository, we are currently using GitHub API
-
     def __init__(self, name, pidfile, logdir, socket='unix://var/run/docker.sock',
             url='https://api.github.com/repos/mconcas/plancton/contents/conf/worker_centos6.json'):
 
@@ -37,10 +39,8 @@ class Plancton(Daemon):
         self.sockpath = socket
         self.cfg_url = url
 
+        # Start time
         self._start_time = self._last_update_time = time.time()
-
-        # up-to-date flag.
-        self._list_up_to_date = False
 
         # Requests session needed by GitHub APIs.
         self._https_session = requests.Session()
@@ -52,21 +52,19 @@ class Plancton(Daemon):
         self._cont_config = None
 
         # Internal status dictionary.
-        self._int_st= {
-
-            'system'     : {},
-            'daemon'     : {
-                            'version'        : self.__version__,
-                            'updateinterval' : 300,
-                            'updateconfig'   : 3600,
-                            'currentpolicy'   : {
-                                                'name' : 'default',
-                                                'maxcontainerno' : 8
-                                                }
-                            },
-            'containers' : {}
-
-        }
+        self._int_st = {
+                        'system'     : {},
+                        'daemon'     : {
+                                        'version'        : self.__version__,
+                                        'updateinterval' : 300,
+                                        'updateconfig'   : 3600,
+                                        'currentpolicy'   : {
+                                                            'name' : 'default',
+                                                            'maxcontainerno' : 8
+                                                            }
+                                        },
+                        'containers' : {}
+                        }
 
         #  flag to force a control
         self._updateflag = True
@@ -421,8 +419,9 @@ class Plancton(Daemon):
     #   @return Nothing
     def main_loop(self):
 
-        delta_1 = time.time() - self._last_confup_time
-        delta_2 = time.time() - self._last_update_time
+        whattimeisit = time.time()
+        delta_1 = whattimeisit - self._last_confup_time
+        delta_2 = whattimeisit - self._last_update_time
 
         if (delta_1 >= int(self._int_st['daemon']['updateconfig'])):
             self.PullImage()
@@ -431,14 +430,20 @@ class Plancton(Daemon):
 
         if (delta_2 >= int(self._int_st['daemon']['updateinterval'])) or self._updateflag:
             self.RefreshRunningAwareness()
-            running = self.ControlContainers()
-            if (running < int(self._int_st['daemon']['currentpolicy']['maxcontainerno'])):
-                self.DeployContainer()
-            else:
-                self._updateflag = False
-                self._last_update_time = time.time()
 
+            # Clean and count running containers
+            running = self.ControlContainers()
+
+            while int(self._int_st['daemon']['currentpolicy']['maxcontainerno']) > int(running):
+                self.DeployContainer()
+                running = running + 1
+
+            self._last_update_time = time.time()
+            self.ControlContainers()
+            self._updateflag = False
             self.PrintInfo()
+
+
 
     ##  Daemon's main function.
     #
@@ -455,6 +460,9 @@ class Plancton(Daemon):
 
         while self._do_main_loop:
             self.main_loop()
+            for i in range(60): # awesome
+                time.sleep(1)
 
         self.logctl.info('Exiting gracefully!')
+
         return 0
