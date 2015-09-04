@@ -3,18 +3,16 @@
 import requests
 import docker
 import json
-from docker import Client
-from daemon import Daemon
-from datetime import datetime
 import os, time
 import logging, logging.handlers
 import base64
 import string
 import random
-import time
-
-
-
+import psutil
+import pprint
+from datetime import datetime
+from docker import Client
+from daemon import Daemon
 
 class Plancton(Daemon):
 
@@ -33,6 +31,8 @@ class Plancton(Daemon):
             url='https://api.github.com/repos/mconcas/plancton/contents/conf/worker_centos6.json'):
 
         super(Plancton, self).__init__(name, pidfile)
+        self._start_time = self._last_update_time = self._last_confup_time = time.time()
+
         self._logdir = logdir
         self.sockpath = socket
         self.cfg_url = url
@@ -55,24 +55,29 @@ class Plancton(Daemon):
         self._int_st= {
 
             'system'     : {},
-            'daemon'     : {},
+            'daemon'     : {
+                            'version'        : self.__version__,
+                            'updateinterval' : 300,
+                            'updateconfig'   : 3600,
+                            'currentpolicy'   : {
+                                                'name' : 'default',
+                                                'maxcontainerno' : 8
+                                                }
+                            },
             'containers' : {}
 
         }
-        # Internal dict lock
-        self._int_lock_state
 
-        self._containers = {}
+        #  flag to force a control
+        self._updateflag = True
+
+        #  Blacklist
+        self.blacklist = []
+
+    def _set_policy(self, name=''):
+        pass
 
 
-    def safexec(self, func):
-        def lockwrap(*args, **kwargs):
-            if self._int_lock_state:
-                return func(*args, **kwargs)
-            else:
-                time.sleep(1)
-                return lockwrap(*args, **kwargs)
-        return lockwrap
     ## Setup use of logfiles, rotated and deleted periodically.
     #
     #  @return Nothing is returned
@@ -163,131 +168,214 @@ class Plancton(Daemon):
     def CreateContainerWithName(self, jconfig, cname_prefix):
 
         try:
-            cname = cname_prefix
-                + '-'
-                + ''.join(random.SystemRandom().choice( string.ascii_uppercase
-                + string.digits
+            cname = cname_prefix \
+                + '-' \
+                + ''.join(random.SystemRandom().choice( string.ascii_uppercase \
+                + string.digits \
                 + string.ascii_lowercase) for _ in range(6))
 
-            self.logctl.debug('Creating container with name %s. ' % cname_prefix)
-            tmpcont = self.docker_client.create_container_from_config( jconfig )
-
-            self.logctl.debug('Registering it to my internal dictionary. ')
-            self._int_st['containers'][tmpcont['Id']]['name'] = 'cname'
-            self._int_st['containers'][tmpcont['Id']]['status'] = 'created'
-
-            return tmpcont
+            self.logctl.debug('Creating container with name %s. ' % cname)
+            tmpcont = self.docker_client.create_container_from_config(jconfig, name=cname)
 
         except Exception as e:
-            self.logctl.error('Couldn\'t create such container! ')
+            self.logctl.error('Couldn\'t create the container! ')
             self.logctl.error(e)
 
-            return False
+            return None
+
+        else:
+            self.logctl.debug('Registering it to internal dictionary. ')
+            self._int_st['containers'][str(tmpcont['Id'])] = { 'name' : cname }
+            self._int_st['containers'][str(tmpcont['Id'])]['status'] = 'created'
+            # self._int_st['containers'][str(tmpcont['Id'])]['id'] = str(tmpcont['Id'])
+
+            return tmpcont
 
     ## Start a created container. Perform a pid inspection and return it if the container is
     #  actually running. The «container» argument is a dictionary with an 'Id' : 'somecoolhash'
     #  key : value couple.
     #
-    # @return
+    # @return pid of container if it's successfully found running after the start. None otherwise.
     def StartContainer(self, container):
 
         try:
-            self.docker_client.start(container=container['Id'])
             self.logctl.debug('Starting container with id: %s' % str(container['Id']))
-
-            # make an inspect call to obtain container pid, in order to ease the monitoring.
-            cont_dict = self.docker_client.inspect_container(container['Id'])
-            cpid = cont_dict['State']['Pid']
-            self._containers[container['Id']] = cpid
-            self.logctl.debug('\t > %s < is running with pid : %s' % (container['Id'], cpid))
-
-            return cpid
+            self.docker_client.start(container = container['Id'])
 
         except Exception as e:
             self.logctl.error(e)
 
+        else:
+
+            # make an inspect call to obtain container pid, in order to ease the monitoring.
+            # Get pid.
+            try:
+                jj = self.docker_client.inspect_container(container['Id'])
+
+            except Exception as e:
+                self.logctl.error(e)
+
+            # Shall I wait for the process to spawn? «while not psutil.pid_exists(pid):» ..?
+            if psutil.pid_exists(jj['State']['Pid']):
+                self.logctl.info('Spawned container %s with PID %s' % (str(container['Id'])[:12], \
+                    jj['State']['Pid']))
+                self._int_st['containers'][container['Id']]['status'] = 'running'
+                self._int_st['containers'][container['Id']]['pid'] = str(jj['State']['Pid'])
+                self._int_st['containers'][container['Id']]['startedat'] = \
+                    str(jj['State']['StartedAt'])
+
+                return jj['State']['StartedAt']
+
+            else:
+                self.logctl.error('Not running process found for %s with pid: %s.'
+                    % (container['Id'], jj['State']['Pid']))
+
+                return None
+
+    ## Deploy a container.
+    #
+    # @return Nothing
+    def DeployContainer(self, cname='plancton-slave'):
+
+        self.StartContainer(self.CreateContainerWithName(cname_prefix=cname, \
+            jconfig=self._cont_config))
 
 
-    def CheckRunningContainers(self, name='plancton-slave-'):
-        # First start or empty internal state.
-        if not self._int_st:
-            self.logctl.debug('Empty internal dict found, performing a check...')
+    ## Called once at startup. Fetch for running containers with a name matching the slaves' one.
+    #  This is just in case the daemon was terminated abnormally (i.e. it couln't be possible to
+    #  wipe out the slave containers).
+    #  Read this a failover method.
+    #
+    # @return True if found owned containers. False otherwise.
+    def RestoreContainerList(self, name='plancton-slave'):
+
+        if not self._int_st['containers']:
+            ret = False
+            # Startup or empty internal state.
+            self.logctl.debug('Empty container list, fetching status...')
             jdata = self.docker_client.containers(all=True)
 
             # Loop over all found containers and filter the owned.
             for i in range(0, len(jdata)):
-                try:
-                    if name in str(jdata[i]['Names']):
-                        # Ok, it's a container of mines.
-                        # Check running state.
-                        self._int_st['containers'][jdata[i]['Id']] = { 'name' : }
-
-    def ListContainers(self, quiet=False, name='plancton-slave-'):
-        try:
-            if not quiet:
-                self.logctl.debug('Checking container list...')
-            jdata = self.docker_client.containers(all=True)
-            if not quiet:
-                self.logctl.debug('Found %r container(s) in the whole Docker pool.' % len(jdata))
-            self._owned_containers = 0
-            if not quiet:
-                self.logctl.info('Listing existent containers:')
-            for i in range(0, len(jdata)):
-                try:
-                    if name in str(jdata[i]['Names']):
-                        self._owned_containers+=1
-                        owner = 'plancton-agent'
-                    else:
-                        owner = 'others        '
+                if name in str(jdata[i]['Names']):
+                    ret = True
+                    # Ok, it's a container of mines.
+                    # Check running state.
+                    # Create the line in the dict.
+                    self._int_st['containers'][str(jdata[i]['Id'])] = \
+                        { 'name' : str(jdata[i]['Names'][0].replace('/','')) }
+                    # self._int_st['containers'][str(jdata[i]['Id'])]['id'] = str(jdata[i]['Id'])
                     status = jdata[i]['Status']
                     if not status:
-                        status = 'Created (Not Running)'
-                    if not quiet:
-                        self.logctl.info('\t [ ID: %s ] [ OWNER: %s ] [ STATUS: %s ] ' \
-                            % (jdata[i]['Id'][:12], owner, status))
-                except Exception as e:
-                        self.logctl.error(e)
+                        self._int_st['containers'][str(jdata[i]['Id'])]['status'] = 'created'
 
-            return self._owned_containers
-        except Exception as e:
-            self.logctl.error(e)
+                    elif 'Up' in status:
+                        self._int_st['containers'][str(jdata[i]['Id'])]['status'] = 'running'
 
-    def DeployContainer(self, cname='plancton-slave', pull=True):
-        self.StartContainer(self.CreateContainerWithName(cname, self._cont_config))
-        self._list_up_to_date = False
-
-    def ControlContainers(self, dominion='plancton-slave', ttl_thresh_secs=12*60*60):
-        jdata = self.docker_client.containers(all=True)
-        for i in range(0, len(jdata)):
-            status = jdata[i]['Status']
-            id = jdata[i]['Id']
-            if not status or 'Exited' in str(status):
-                if dominion in str(jdata[i]['Names']):
-                    ## Exited and owned.
-                    try:
-                        self.docker_client.remove_container(id)
-                        self.logctl.debug('Removed %s successfully.' % id)
-                    except Exception as e:
-                        self.logctl.error(e)
-
-            else: ## Running container.
-                try:
-                    jdata2 = self.docker_client.inspect_container(id)
-                    startedat = jdata2['State']['StartedAt']
-                    statobj = datetime.strptime(str(startedat)[:19], "%Y-%m-%dT%H:%M:%S")
-
-                    ## (**) This merely sets a workaround to an issue with Docker's time.
-                    delta = time.time() - time.mktime(statobj.timetuple()) - 7200 ## (**)
-                    if delta > ttl_thresh_secs:
+                        # Inspect to get pid and uptime.
                         try:
-                            self.logctl.info('Killing %s since it exceeded the ttl_thresh' % id )
-                            self.docker_client.remove_container(id, force=True)
-                        except Exception as e:
-                            self.logctl.error(e)
+                            jj = self.docker_client.inspect_container(jdata[i]['Id'])
+                            self._int_st['containers'][jdata[i]['Id']]['pid'] = jj['State']['Pid']
+                            self._int_st['containers'][jdata[i]['Id']]['startedat'] = \
+                                str(jj['State']['StartedAt'])
 
+                        except Exception as e:
+                            slef.logctl.error(e)
+
+                    elif 'Exited' in status:
+                        self._int_st['containers'][jdata[i]['Id']]['status'] = 'exited'
+                    else:
+                        self._int_st['containers'][jdata[i]['Id']]['status'] =  status
+
+            return ret
+
+    ## PPrinter for internal status. Debug purpose only.
+    #
+    # @return nothing
+    def DumpStatus(self):
+
+        pp = pprint.PrettyPrinter(indent=4)
+        pp.pprint(self._int_st)
+
+    ## Self-esplicative: refresh internal data quering the status of the containers.
+    #
+    #  @return nothing
+    def RefreshRunningAwareness(self):
+        for i,j in self._int_st['containers'].iteritems():
+            if 'running' in j.values():
+                try:
+                    jdata = self.docker_client.inspect_container(i)
                 except Exception as e:
                     self.logctl.error(e)
+                else:
+                    if not jdata['State']['Pid']:
+                        # gone
+                        j.pop('pid', None)
+                        j['status'] = 'exited'
 
+    ## Log some informations about the self-consciousness of the containers.
+    #
+    # @return True if non empty dictionary. False Otherwise.
+    def PrintInfo(self):
+        self.logctl.info('-------------------------------------------------------------------')
+        self.logctl.info('| n° |  container id  |  status   |         name          |  pid  |')
+        self.logctl.info('-------------------------------------------------------------------')
+        for i,j in self._int_st['containers'].iteritems():
+            self.logctl.info( '| %s  |  %s  |  %s  | %s | %s |' \
+                % (self._int_st['containers'].keys().index(i) + 1, i[:12],
+                j['status'], j['name'], j['pid']))
+        self.logctl.info('-------------------------------------------------------------------')
+
+    ## This is the CController it gets rid of exceeded ttl or exited/created (read 'not started')
+    #  containers.
+    #
+    # @return number of active containers.
+    def ControlContainers(self, ttl_thresh_secs=12*60*60):
+
+        for i,j in self._int_st['containers'].iteritems():
+            if 'running' in str(self._int_st['containers'][i]['status']):
+                # running.
+                statobj = datetime.strptime(self._int_st['containers'][i]['startedat'][:19],
+                    "%Y-%m-%dT%H:%M:%S")
+                ##  (**) This merely sets a workaround to an issue with Docker's time.
+                #  on my test docker installation time inside the container is two hour early.
+                delta = time.time() - time.mktime(statobj.timetuple()) - 7200 ## (**)
+
+                if delta > ttl_thresh_secs:
+                    # Time exceeded
+                    self.logctl.info('Killing %s since it exceeded the ttl_thresh' \
+                        % i )
+                    try:
+                        self.docker_client.remove_container(i, force=True)
+                    except Exception as e:
+                        self.logctl.error(e)
+                    else:
+                        self.logctl.debug('Removed %s successfully.' % i)
+                        self.blacklist.append(i)
+
+            else:
+                # not running: exited/created
+                try:
+                    self.docker_client.remove_container(i)
+                except Exception as e:
+                    self.logctl.debug(i)
+                    self.logctl.error(e)
+                else:
+                    self.blacklist.append(i)
+                    self.logctl.debug('Removed %s successfully.' % i)
+
+        # Update internal status.
+        for i in self.blacklist:
+            if i in self._int_st['containers']:
+                self._int_st['containers'].pop(i,None)
+
+        self.blacklist = []
+
+        return len(self._int_st['containers']) # running number returned
+
+    ## Gracefully exiting, plancton kills all the owned containers.
+    #
+    # @return Nothing
     def JumpShip(self, dominion='plancton-slave'):
         self.logctl.warning('Every man for himself, abandon ship!')
         jdata = self.docker_client.containers(all=True)
@@ -296,24 +384,32 @@ class Plancton(Daemon):
                 id = jdata[i]['Id']
                 try:
                     self.docker_client.remove_container(id, force=True)
-                    self.logctl.warning('\t > container id: %s out! ' % id )
                 except Exception as e:
                     self.logctl.error(e)
+                    return False
+                else:
+                    self.logctl.warning('\t > container id: %s out! ' % id )
+                    self.blacklist.append(i)
+
+        # Update internal status.
+        for i in self.blacklist:
+            if i in self._int_st['containers']:
+                self._int_st['containers'].pop(i,None)
+
+        self.blacklist = []
+        return True
 
     ## Action to perform when some exit signal is received.
     #
-    #  @return When returning True, exiting continues, when returning False exiting is cancelled
+    #  @return True if success.
     def onexit(self):
         self.logctl.info('Termination requested: we will exit gracefully soon...')
         self._do_main_loop = False
-        try:
-            self.JumpShip()
+        if self.JumpShip():
             self.logctl.info('Exited gracefully, see you soon.')
             return True
-        except Exception as e:
-            self.logctl.error(e)
-            return False
 
+        return False
 
     ##  Daemon's main loop.
     #   Perfroms an image pull/update at startup and every 'delta' seconds.
@@ -321,37 +417,42 @@ class Plancton(Daemon):
     #   be re-downloaded, this way I want to reduce the requests number, though.
     #   Moreover once the control is set one can schedule more features, like update-checks
     #   for the cfg file, for the daemon itself and so on.
+    #
     #   @return Nothing
-    def main_loop(self,w_containers_thresh=5,update_every=3600):
-        self.ControlContainers()
-        delta = time.time() - self._last_update_time
-        if (delta >= update_every):
+    def main_loop(self):
+
+        delta_1 = time.time() - self._last_confup_time
+        delta_2 = time.time() - self._last_update_time
+
+        if (delta_1 >= int(self._int_st['daemon']['updateconfig'])):
             self.PullImage()
             self.GetOnlineConf()
-            self._last_update_time = time.time()
-        # If statement just to avoid continuously spamming into logfile. Thus only when an actual
-        # modification is performed it report a new list.
-        if not self._list_up_to_date:
-            self.ListContainers(quiet=False)
-            self._list_up_to_date = True
-        else:
-            self.ListContainers(quiet=True)
-            self._list_up_to_date = True
+            self._last_confup_time = time.time()
 
-        if self._owned_containers <= w_containers_thresh:
-            self.DeployContainer()
+        if (delta_2 >= int(self._int_st['daemon']['updateinterval'])) or self._updateflag:
+            self.RefreshRunningAwareness()
+            running = self.ControlContainers()
+            if (running < int(self._int_st['daemon']['currentpolicy']['maxcontainerno'])):
+                self.DeployContainer()
+            else:
+                self._updateflag = False
+                self._last_update_time = time.time()
+
+            self.PrintInfo()
 
     ##  Daemon's main function.
     #
     #  @return Exit code of the daemon: keep it in the range 0-255
     def run(self):
         self.SetupLogFiles()
-        self.logctl.info('Running plancton v%s' % self.__version__)
+        self.logctl.info('---- plancton daemon v%s ----' % self.__version__)
+        self.RestoreContainerList()
         self.GetOnlineConf()
-        self._do_main_loop = True
-        # At startup download online configuration.
         self.PullImage()
+        self.ControlContainers()
         self.GetSetupInfo()
+        self._do_main_loop = True
+
         while self._do_main_loop:
             self.main_loop()
 
