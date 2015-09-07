@@ -20,7 +20,7 @@ class Plancton(Daemon):
     __version__ = '0.0.2'
 
     # Base policies dictionary
-    self._policies = {}
+    # self._policies = {}
 
     ## Constructor.
     #
@@ -39,10 +39,10 @@ class Plancton(Daemon):
         self.sockpath = socket
         self.cfg_url = url
 
-        # Start time
+        # Start time
         self._start_time = self._last_update_time = time.time()
 
-        # Requests session needed by GitHub APIs.
+        # Requests session needed by GitHub APIs.
         self._https_session = requests.Session()
 
         # docker client
@@ -319,7 +319,7 @@ class Plancton(Daemon):
         self.logctl.info('| n° |  container id  |  status   |         name          |  pid  |')
         self.logctl.info('-------------------------------------------------------------------')
         for i,j in self._int_st['containers'].iteritems():
-            self.logctl.info( '| %s  |  %s  |  %s  | %s | %s |' \
+            self.logctl.info( '| %s  |  %s  |  %s  | %s | %s  |' \
                 % (self._int_st['containers'].keys().index(i) + 1, i[:12],
                 j['status'], j['name'], j['pid']))
         self.logctl.info('-------------------------------------------------------------------')

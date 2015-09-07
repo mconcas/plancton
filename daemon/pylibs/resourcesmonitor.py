@@ -5,7 +5,7 @@
 import psutil
 import pprint
 
-class ResourcesMonitor():
+class Resourcesmonitor():
     def __init__(self):
         self._system_status = self.SystemStatus()
 
@@ -41,7 +41,7 @@ class ResourcesMonitor():
 
         return systat
 
-rm = ResourcesMonitor()
+rm = Resourcesmonitor()
 # print rm._system_status
 pp = pprint.PrettyPrinter(indent=4)
 pp.pprint(rm._system_status)
