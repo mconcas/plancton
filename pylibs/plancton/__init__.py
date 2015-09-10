@@ -398,7 +398,7 @@ class Plancton(Daemon):
         self.logctl.warning('Every man for himself, abandon ship!')
         jdata = self.docker_client.containers(all=True)
         for i in range(0, len(jdata)):
-            if dominion in str(jdata[i]['Names']):
+            if name in str(jdata[i]['Names']):
                 id = jdata[i]['Id']
                 try:
                     self.docker_client.remove_container(id, force=True)
