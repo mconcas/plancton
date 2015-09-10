@@ -3,6 +3,7 @@
       "daytime" : {
          "start"        : "08:00:00",
          "end"          : "20:00:00",
+         "cputhresh"    : "75",
          "mincontainer" : "1",
          "maxcontainer" : "8"
       },
@@ -10,6 +11,7 @@
       "nighttime" : {
          "start"        : "20:00:00",
          "end"          : "08:00:00",
+         "cputhresh"    : "75",
          "mincontainer" : "1",
          "maxcontainer" : "8"
          }
@@ -19,6 +21,7 @@
       "daytime" : {
          "start"        : "08:00:00",
          "end"          : "20:00:00",
+         "cputhresh"    : "75",
          "mincontainer" : "1",
          "maxcontainer" : "8"
       },
@@ -26,6 +29,7 @@
       "nighttime" : {
          "start"        : "20:00:00",
          "end"          : "08:00:00",
+         "cputhresh"    : "75",
          "mincontainer" : "1",
          "maxcontainer" : "8"
       }
