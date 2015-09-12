@@ -27,8 +27,6 @@
       "PublishAllPorts": false,
       "Privileged": false,
       "ReadonlyRootfs": false,
-      "Dns": ["8.8.8.8"],
-      "DnsSearch": [""],
       "ExtraHosts": null,
       "CapAdd": ["NET_ADMIN"],
       "CapDrop": ["MKNOD"],
