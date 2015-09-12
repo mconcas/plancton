@@ -6,8 +6,4 @@ containers known as **plancton-slaves**.
 Its main task is to dynamically resize the slave pool the number of running slaves on the host,
 basing on resources utilization like RAM, CPU usage, Disks availability.
 
-In a final stable version Plancton is supposed to have:
-  * Configurable policies
-  *
-
 [Thanks G. for suggesting the name]
