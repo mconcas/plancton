@@ -334,8 +334,8 @@ class Plancton(Daemon):
                             self.logctl.error(e)
                     elif 'Exited' in status:
                         self._int_st['containers'][jdata[i]['Id']]['status'] = 'exited'
-                    else:
-                        self._int_st['containers'][jdata[i]['Id']]['status'] =  status
+                    elif 'Dead':
+                        self._int_st['containers'][jdata[i]['Id']]['status'] =  'dead'
 
             return ret
 
@@ -380,7 +380,7 @@ class Plancton(Daemon):
                         self.logctl.debug('Removed %s successfully.' % i)
             else:
                 try:
-                    self.docker_client.remove_container(i)
+                    self.docker_client.remove_container(i, force=True)
                 except Exception as e:
                     self.logctl.error(e)
                 else:
