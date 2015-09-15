@@ -229,7 +229,7 @@ class Daemon(object):
             return True
         # Try killing the daemon process gracefully
         kill_count = 0
-        kill_count_threshold = 30
+        kill_count_threshold = 60
         try:
             while kill_count < kill_count_threshold:
                 os.kill(self.pid, signal.SIGTERM)
@@ -247,7 +247,8 @@ class Daemon(object):
         if self.isRunning():
             self.logctl.error('could not terminate')
             return False
-
+            
+        # It's likely this will never be printed.
         self.logctl.warning('force-killed')
         return True
 
