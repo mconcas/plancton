@@ -53,7 +53,7 @@ function main() {
    super git clone https://github.com/mconcas/plancton $Daemondir/git
    super chown -R $Daemonuser $Daemondir
 
-   super runuser $Daemonuser -l $Rundir/run.sh
+   super su $Daemonuser -c "$Daemondir/git/run.sh"
 }
 
 main
