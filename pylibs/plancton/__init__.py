@@ -1,3 +1,4 @@
+
 # -*- coding: utf-8 -*-
 import base64
 import docker
@@ -161,7 +162,6 @@ class Plancton(Daemon):
     #
     # @return json data found at the 'content' key by default.
     def _git_API_get(self, url, key='content', encoded=True):
-
         try:
             httpsreq = self._https_session.get(url)
             httpsreq.raise_for_status()
@@ -186,6 +186,9 @@ class Plancton(Daemon):
     #
     #  @return True if the request success, False otherwise.
     def _get_online_config(self):
+        self.logctl.info('...downlaoding online configuration... ')
+        self.logctl.info(' - container config: %s ' % self.cfg_url)
+        self.logctl.info(' - policies: %s ' % self.pol_url)
         self._cont_config = self._git_API_get(self.cfg_url)
         self._policies_json = self._git_API_get(self.pol_url)
 
