@@ -10,8 +10,7 @@
     "StdinOnce": false,
     "Env": null,
     "Cmd": [
-      "/bin/sleep", 
-      "200"
+      "/tmp/condor-centos6-worker-pilot"
       ],
     "Image": "mconcas/centos6-autobuild-container:latest",
     "WorkingDir": "/",
