@@ -36,7 +36,7 @@ function main() {
    testreq git pip docker
    super "useradd -d $Daemondir -g docker $Daemonuser"
    python -c "import docker" || super "pip install docker-py"
-   su -c $Daemonuser "echo -e '@reboot $Rundir/run.sh' \| crontab - "
+   super "echo \"@reboot /opt/plancton/run/run.sh\" | crontab -u plancton -"
 }
 
 main
