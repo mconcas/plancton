@@ -36,7 +36,7 @@ function main() {
    testreq git pip docker
 
    echo "adding $Daemonuser..."
-   super "useradd -d $Daemondir -g docker $Daemonuser" > /dev/null 2>&1
+   super "useradd -d $Daemondir -g docker $Daemonuser" 2>/dev/null
 
    echo "installing docker-py if not present..."
    python -c "import docker" || super "pip install docker-py"
@@ -44,6 +44,7 @@ function main() {
    echo "adding cronjob to plancton's crontab..."
    super "echo \"@reboot /opt/plancton/run/run.sh\" | crontab -u plancton -"
 
+   super "mkdir -p $Daemondir && chown -R $Daemondir"
    echo "cloning plancton files to $Daemondir..."
    git clone https://github.com/mconcas/plancton $Daemondir
 
