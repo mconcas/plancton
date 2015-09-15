@@ -48,9 +48,10 @@ function main() {
    super crontab -u $Daemonuser /tmp/tempcron
    super rm /tmp/tempcron
    super rm -Rf $Daemondir
-   super mkdir -p $Daemondir && chown -R $Daemonuser $Daemondir
+   super mkdir -p $Daemondir
    echo "cloning plancton files to $Daemondir..."
    super git clone https://github.com/mconcas/plancton $Daemondir/git
+   super chown -R $Daemonuser $Daemondir
 
    super runuser $Daemonuser -l $Rundir/run.sh
 }
