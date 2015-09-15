@@ -11,4 +11,5 @@ git reset --hard origin/master
 
 export PATH=$PATH:$DEST/bin
 export PYTHONPATH=$PYTHONPATH:$DEST/pylibs
+
 planctonctl start
