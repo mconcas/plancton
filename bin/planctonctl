@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+# -*- coding: utf-8 -*-
 ## @file plancton
 #  Main executable for the plancton daemon.
 #
@@ -37,7 +37,7 @@ if daemondir is None:
 else:
     force_daemondir = True
 
-if force_daemondir == False and daemondir.startswith('/var/lib/plancton'):
+if force_daemondir == False and daemondir.startswith('/var/lib/plancton'):
     # Detected a system-wide installation
     daemondir = None
     pidfile_default = '/var/run/plancton.pid'
