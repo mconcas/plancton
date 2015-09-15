@@ -34,9 +34,20 @@ function testreq() {
 function main() {
    welcome
    testreq git pip docker
-   super "useradd -d $Daemondir -g docker $Daemonuser"
+
+   echo "adding $Daemonuser..."
+   super "useradd -d $Daemondir -g docker $Daemonuser" > /dev/null 2>&1
+
+   echo "installing docker-py if not present..."
    python -c "import docker" || super "pip install docker-py"
+
+   echo "adding cronjob to plancton's crontab..."
    super "echo \"@reboot /opt/plancton/run/run.sh\" | crontab -u plancton -"
+
+   echo "cloning plancton files to $Daemondir..."
+   git clone https://github.com/mconcas/plancton $Daemondir
+
+   return 0
 }
 
 main
