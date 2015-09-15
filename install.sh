@@ -47,6 +47,8 @@ function main() {
    echo "cloning plancton files to $Daemondir..."
    git clone https://github.com/mconcas/plancton $Daemondir
 
+   $Rundir/run.sh
+
    return 0
 }
 
