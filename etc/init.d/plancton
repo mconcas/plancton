@@ -142,7 +142,7 @@ function stop() {
    echo_begin "Stopping ${Prog}"
    sudo -u "$planctonUser" planctonctl stop > /dev/null 2>&1
 
-   # note: query_status "fails" (1) if daemon is stoped: this is a success here
+   # note: query_status "fails" (1) if daemon is stopped: this is a success here
    lastMsg=`query_status`
    ret=$(( ! $? ))
 
