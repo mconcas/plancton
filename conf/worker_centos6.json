@@ -1,6 +1,4 @@
 {
-    "Hostname": "centos6-worker",
-    "Domainname": "to.infn.it",
     "User": "",
     "AttachStdin": false,
     "AttachStdout": false,
