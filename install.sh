@@ -33,6 +33,8 @@ function super() {
       else
          su -c "$*"
       fi
+   else
+      bash -c "$@"
    fi
 }
 
