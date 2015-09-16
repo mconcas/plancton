@@ -119,7 +119,7 @@ class Plancton(Daemon):
         deltaup = curruptime - self.uptime0
         deltaidle = curridletime - self.idletime0
         try:
-            eff = float((deltaugetp*self._cpu_number - deltaidle)*100) / float(deltaup*self._cpu_number)
+            eff = float((deltaup*self._cpu_number - deltaidle)*100) / float(deltaup*self._cpu_number)
             self.uptime0 = curruptime
             self.idletime0 = curridletime
         except ZeroDivisionError:
