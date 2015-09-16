@@ -1,0 +1,17 @@
+#!/bin/bash
+
+DEST=/opt/plancton/git
+
+function main() {
+   [[ "$USER" != 'plancton' ]] && echo "Run this command as plancton." && exit 1
+   echo "-------------------------"
+   echo "|Plancton status called.|"
+   echo "-------------------------"
+
+   export PATH=$PATH:$DEST/bin
+   export PYTHONPATH=$PYTHONPATH:$DEST/pylibs
+   planctonctl status
+
+   return 0
+}
+main

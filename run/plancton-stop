@@ -1,0 +1,18 @@
+#!/bin/bash
+
+PIDDIR=/opt/plancton/.plancton
+
+function main() {
+   [[ "$USER" != 'plancton' && $(id -u) != "0" ]] && echo "Run this command as plancton or root." && exit 1
+   echo "------------------------"
+   echo "|Plancton stop  called.|"
+   echo "------------------------"
+
+   [[ -f "$PIDDIR"/plancton.pid ]] && export PLANCTONPID=`cat "$PIDDIR"/plancton.pid` && kill $PLANCTONPID
+
+   unset PLANCTONPID
+   unset PIDDIR
+
+   return 0
+}
+main

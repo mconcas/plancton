@@ -1,0 +1,23 @@
+#!/bin/bash
+
+DEST=/opt/plancton/git
+
+function main() {
+   [[ "$USER" != 'plancton' ]] && echo "Run this command as plancton." && exit 1
+   echo "------------------------"
+   echo "|Plancton start called.|"
+   echo "------------------------"
+
+   if [ ! -e $DEST/.git ]; then
+      git clone https://github.com/mconcas/plancton $DEST
+   fi
+
+   cd $DEST
+   git reset --hard origin/master
+   export PATH=$PATH:$DEST/bin
+   export PYTHONPATH=$PYTHONPATH:$DEST/pylibs
+   planctonctl start
+
+   return 0
+}
+main
