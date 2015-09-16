@@ -28,7 +28,7 @@ function testreq() {
 }
 
 function main() {
-   bash_c = 'bash -c'
+   bash_c='bash -c'
    if [[ $(id -u) != "0" ]]; then
 		if testcmd sudo; then
 			bash_c='sudo -E sh -c'
