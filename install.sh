@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env bash -ex
 
 Daemondir="/opt/plancton"
 Rundir="$Daemondir/git/run"
