@@ -1,24 +1,15 @@
-#!/bin/bash
-
-export DEST=/opt/plancton/git
-
-function main() {
-   [[ "$USER" != 'plancton' ]] && echo "Run this command as plancton." && exit 1
-   echo "------------------------"
-   echo "|Plancton start called.|"
-   echo "------------------------"
-
-   if [ ! -e $DEST/.git ]; then
-      git clone https://github.com/mconcas/plancton $DEST
-   fi
-
-   cd $DEST
-   git reset --hard origin/master
-   export PATH=$PATH:$DEST/bin
-   export PYTHONPATH=$PYTHONPATH:$DEST/pylibs
-   planctonctl start
-
-   return 0
-}
-main
-unset DEST
+#!/bin/bash -xe
+DEST=/opt/plancton/git
+BRANCH=master
+cd /
+[[ $(whoami) == plancton ]]
+[[ -d $DEST/.git ]] || git clone -b $BRANCH https://github.com/mconcas/plancton $DEST
+cd $DEST
+git remote update -p
+git clean -f -d
+git clean -fX -d
+git checkout $BRANCH
+git reset --hard origin/$BRANCH
+export PATH=$PATH:$DEST/bin
+export PYTHONPATH=$PYTHONPATH:$DEST/pylibs
+planctonctl start
