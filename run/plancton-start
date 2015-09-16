@@ -1,6 +1,6 @@
 #!/bin/bash
 
-DEST=/opt/plancton/git
+export DEST=/opt/plancton/git
 
 function main() {
    [[ "$USER" != 'plancton' ]] && echo "Run this command as plancton." && exit 1
@@ -21,3 +21,4 @@ function main() {
    return 0
 }
 main
+unset DEST
