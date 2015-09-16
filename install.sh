@@ -41,6 +41,8 @@ function super() {
 function main() {
    welcome
    testreq git pip docker
+   echo "adding group docker..."
+   super getent group docker || groupadd docker
    echo "adding $Daemonuser..."
    super useradd -d $Daemondir -g docker $Daemonuser
    echo "installing docker-py if not present..."
