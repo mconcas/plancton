@@ -459,7 +459,7 @@ class Plancton(Daemon):
         running = self._control_containers()
         efficiency = self._valid_efficiency()
         self.logctl.debug('CPU efficiency: %2.f ' % efficiency)
-        while (_cpu_num() - 2) > int(running) and efficiency < 75.0:
+        while (_cpu_num() - 0 ) > int(running) and efficiency < 75.0:
             self._deploy_container()
             running = running+1
         self._last_update_time = _utc_time()
