@@ -5,7 +5,8 @@ echo "-------------------"
 echo "|Runscript called.|"
 echo "-------------------"
 function main() {
-    if [ ! -e $DEST/.git ]; then 
+    [[ "$USER" != 'plancton' ]] && echo "Only plancton user can run this script." && exit 1
+    if [ ! -e $DEST/.git ]; then
         git clone https://github.com/mconcas/plancton $DEST
     fi
     cd $DEST
@@ -13,7 +14,7 @@ function main() {
     export PATH=$PATH:$DEST/bin
     export PYTHONPATH=$PYTHONPATH:$DEST/pylibs
     planctonctl start
-    
+
     return 0
 }
 
