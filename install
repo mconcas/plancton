@@ -11,26 +11,20 @@ function welcome() {
    echo
 }
 function testcmd() {
-   command -v "$@" > /dev/null 2>&1
+   return $(command -v "$@" > /dev/null 2>&1)
+
 }
 function testreq() {
    # check prereqs, test with testcmd().
    echo "Testing requisites..."
    for i in $@; do
-      testcmd $i
-   done
-}
-
-function super() {
-   if [[ $(id -u) != "0" ]]; then
-      if sudo -h > /dev/null 2>&1; then
-         sudo -sE "$@"
+      if ! testcmd "$i"; then
+         echo -e "\e[1;91m !! $i MISSING !! \e[0;0m"
+         exit 1
       else
-         su -c "$*"
+         echo -e "\e[1;32m !! $i FOUND !! \e[0;0m"
       fi
-   else
-      bash -c "$*"
-   fi
+   done
 }
 
 function main() {
@@ -60,12 +54,13 @@ function main() {
    echo "adding cronjob to plancton's crontab..."
    $bash_c 'echo "@reboot /opt/plancton/run/run.sh" > /tmp/tempcron'
    $bash_c "crontab -u $Daemonuser /tmp/tempcron"
-   $bash_c "rm /tmp/tempcron; rm -Rf $Daemondir; mkdir -p $Daemondir"
-   echo "cloning plancton files to $Daemondir..."
-   $bash_c "git clone https://github.com/mconcas/plancton $Daemondir/git"
+   $bash_c "rm /tmp/tempcron; mkdir -p $Daemondir"
+   # echo "cloning plancton files to $Daemondir..."
+   # $bash_c "git clone https://github.com/mconcas/plancton $Daemondir/git"
+   # $bash_c " "
    $bash_c "chown -R $Daemonuser $Daemondir"
-
-   $bash_c "su $Daemonuser -c $Daemondir/git/run/plancton-start"
+   $bash_c "su $Daemonuser -c 'bash <(curl -sSL https://raw.githubusercontent.com/mconcas/plancton/master/run/plancton-start)'"
+   # $bash_c "su $Daemonuser -c $Daemondir/git/run/plancton-start"
 }
 
 # Entry point

@@ -12,6 +12,6 @@ function main() {
    export PYTHONPATH=$PYTHONPATH:$DEST/pylibs
    planctonctl status
 
-   return 0
+   return $?
 }
 main
