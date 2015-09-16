@@ -119,7 +119,7 @@ class Plancton(Daemon):
         deltaup = curruptime - self.uptime0
         deltaidle = curridletime - self.idletime0
         try:
-            eff = (deltaup - deltaidle/self._cpu_number)*100 / deltaup
+            eff = float((deltaugetp*self._cpu_number - deltaidle)*100) / float(deltaup*self._cpu_number)
             self.uptime0 = curruptime
             self.idletime0 = curridletime
         except ZeroDivisionError:
@@ -458,7 +458,7 @@ class Plancton(Daemon):
         self._refresh_internal_list()
         running = self._control_containers()
         efficiency = self._valid_efficiency()
-        self.logctl.debug('CPU efficiency: %2.f ' % efficiency)
+        self.logctl.debug('CPU efficiency: %10.f \% ' % efficiency)
         while (_cpu_num() - 0 ) > int(running) and efficiency < 75.0:
             self._deploy_container()
             running = running+1
