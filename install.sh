@@ -34,7 +34,7 @@ function super() {
          su -c "$*"
       fi
    else
-      bash -c "$@"
+      bash -c "$*"
    fi
 }
 
