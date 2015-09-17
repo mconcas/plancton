@@ -1,9 +1,12 @@
-#!/usr/bin/env bash
-
+#! /bin/bash
 export Daemondir="/opt/plancton"
 export Rundir="$Daemondir/git/run"
 export Basename=`basename $0`
 export Daemonuser="plancton"
+
+MANUAL_DOCKER_ENABLE=no
+MANUAL_DOCKER_RESTART=no
+MANUAL_DOCKER_INSTALL=no
 
 function welcome() {
    echo
@@ -44,23 +47,49 @@ function main() {
    fi
 
    welcome
-   testreq git pip docker
+   testreq git pip
+   if ! testcmd docker; then
+      echo "docker-engine not found, trying to install it automatically..."
+      if ! $($bash_c 'curl -sSL https://get.docker.com/ | sh'); then
+         echo "[Failed] You have to install docker-engine manually to continue."
+         MANUAL_DOCKER_INSTALL=yes
+         exit 1
+      fi
+   fi
+   echo "restarting docker daemon..."
+   if ! $bash_c 'service docker restart'; then
+      echo "couldn't, please start/restart it manually..."
+      MANUAL_DOCKER_RESTART=yes
+   fi
+
+   echo "enabling docker daemon..."
+   $bash_c 'systemctl enable docker' > /dev/null 2>&1 ||                        # CentOS7 & Fedora > 21
+   $bash_c 'chkconfig docker --add && chkconfig docker on' > /dev/null 2>&1 ||  # Fedora < 21 & SuSE (lol)
+   $bash_c 'update-rc.d docker defaults'> /dev/null 2>&1 ||                     # Ubuntu &  Debian
+   $bash_c 'rc-update add docker default' > /dev/null 2>&1 ||                   # Gentoo  (lol)
+   ( echo "couldn't, please enable it manually..." && MANUAL_DOCKER_ENABLE=yes )
+
    echo "adding group docker..."
-   $bash_c 'getent group docker || groupadd docker'
+   $bash_c 'getent group docker || groupadd docker' > /dev/null 2>&1
    echo "adding $Daemonuser..."
-   $bash_c "useradd -d $Daemondir -g docker $Daemonuser"
+   $bash_c "useradd -d $Daemondir -g docker $Daemonuser"  > /dev/null 2>&1
    echo "installing docker-py if not present..."
-   $bash_c 'python -c "import docker" || pip install docker-py'
+   $bash_c 'python -c "import docker" || pip install docker-py ' > /dev/null 2>&1
    echo "adding cronjob to plancton's crontab..."
    $bash_c 'echo "@reboot /opt/plancton/run/run.sh" > /tmp/tempcron'
    $bash_c "crontab -u $Daemonuser /tmp/tempcron"
    $bash_c "rm /tmp/tempcron; mkdir -p $Daemondir"
-   # echo "cloning plancton files to $Daemondir..."
-   # $bash_c "git clone https://github.com/mconcas/plancton $Daemondir/git"
-   # $bash_c " "
    $bash_c "chown -R $Daemonuser $Daemondir"
+   if [[ "$MANUAL_DOCKER_INSTALL" == "yes" ]]; then
+      echo -e " \e[1;91m * Please install docker manually.  \e[0;0m " && exit 1
+   elif [[ "$MANUAL_DOCKER_RESTART" == "yes" ]]; then
+      echo -e " \e[1;91m * Please start/restart docker manually  \e[0;0m " && exit 1
+   elif [[ "$MANUAL_DOCKER_ENABLE" == "yes" ]]; then
+      echo -e " \e[1;33m * Please enable docker manually.  \e[0;0m "
+   fi
+
    $bash_c "su $Daemonuser -c 'bash <(curl -sSL https://raw.githubusercontent.com/mconcas/plancton/master/run/plancton-start)'"
-   # $bash_c "su $Daemonuser -c $Daemondir/git/run/plancton-start"
+
 }
 
 # Entry point
