@@ -14,13 +14,12 @@ function welcome() {
    echo
 }
 function testcmd() {
-   return $(command -v "$@" > /dev/null 2>&1)
-
+   command -v "$@" > /dev/null 2>&1
 }
 function testreq() {
    # check prereqs, test with testcmd().
    echo "Testing requisites..."
-   for i in $@; do
+   for i in "$@"; do
       if ! testcmd "$i"; then
          echo -e "\e[1;91m !! $i MISSING !! \e[0;0m"
          exit 1
@@ -33,68 +32,77 @@ function testreq() {
 function main() {
    bash_c='bash -c'
    if [[ $(id -u) != "0" ]]; then
-		if testcmd sudo; then
-			bash_c='sudo -E sh -c'
-		elif testcmd su; then
-			bash_c='su -c'
-		else
-			cat >&2 <<-'EOF'
-			Error: this installer needs the ability to run commands as root.
-			No "sudo" nor "su" available to make this happen.
-			EOF
-			exit 1
-		fi
+      if testcmd sudo; then
+         bash_c='sudo -E sh -c'
+      elif testcmd su; then
+         bash_c='su -c'
+      else
+         echo "Error: this installer needs the ability to run commands as root."
+         echo 'No "sudo" nor "su" available to make this happen.'
+         exit 1
+      fi
+      echo "Relaunching as root..."
+      exec $bash_c "$0 $*"
    fi
 
    welcome
    testreq git pip
    if ! testcmd docker; then
       echo "docker-engine not found, trying to install it automatically..."
-      if ! $($bash_c 'curl -sSL https://get.docker.com/ | sh'); then
+      if (curl -sSL https://get.docker.com/ | sh); then
          echo "[Failed] You have to install docker-engine manually to continue."
          MANUAL_DOCKER_INSTALL=yes
          exit 1
       fi
    fi
    echo "restarting docker daemon..."
-   if ! $bash_c 'service docker restart'; then
+   if ! service docker restart; then
       echo "couldn't, please start/restart it manually..."
       MANUAL_DOCKER_RESTART=yes
    fi
 
-   echo "enabling docker daemon..."
-   $bash_c 'systemctl enable docker' > /dev/null 2>&1 ||                        # CentOS7 & Fedora > 21
-   $bash_c 'chkconfig docker --add && chkconfig docker on' > /dev/null 2>&1 ||  # Fedora < 21 & SuSE (lol)
-   $bash_c 'update-rc.d docker defaults'> /dev/null 2>&1 ||                     # Ubuntu &  Debian
-   $bash_c 'rc-update add docker default' > /dev/null 2>&1 ||                   # Gentoo  (lol)
-   ( echo "couldn't, please enable it manually..." && MANUAL_DOCKER_ENABLE=yes )
+   (
+      set -e
+      echo "enabling docker daemon..."
+      systemctl enable docker > /dev/null 2>&1 ||                          # CentOS7 & Fedora > 21
+      (chkconfig docker --add && chkconfig docker on) > /dev/null 2>&1 ||  # Fedora < 21 & SuSE (lol)
+      update-rc.d docker defaults > /dev/null 2>&1 ||                      # Ubuntu &  Debian
+      rc-update add docker default > /dev/null 2>&1 ||                     # Gentoo (lol)
+      ( echo "couldn't, please enable it manually..." && MANUAL_DOCKER_ENABLE=yes )
 
-   echo "adding group docker..."
-   $bash_c 'getent group docker || groupadd docker' > /dev/null 2>&1
-   echo "adding $Daemonuser..."
-   $bash_c "useradd -d $Daemondir -g docker $Daemonuser"  > /dev/null 2>&1
-   echo "installing docker-py if not present..."
-   $bash_c 'python -c "import docker" || pip install docker-py ' > /dev/null 2>&1
-   echo "adding cronjob to plancton's crontab..."
-   $bash_c 'echo "@reboot /opt/plancton/run/run.sh" > /tmp/tempcron'
-   $bash_c "crontab -u $Daemonuser /tmp/tempcron"
-   $bash_c "rm /tmp/tempcron; mkdir -p $Daemondir"
-   $bash_c "chown -R $Daemonuser $Daemondir"
-   if [[ "$MANUAL_DOCKER_INSTALL" == "yes" ]]; then
-      echo -e " \e[1;91m * Please install docker manually.  \e[0;0m " && exit 1
-   elif [[ "$MANUAL_DOCKER_RESTART" == "yes" ]]; then
-      echo -e " \e[1;91m * Please start/restart docker manually  \e[0;0m " && exit 1
-   elif [[ "$MANUAL_DOCKER_ENABLE" == "yes" ]]; then
-      echo -e " \e[1;33m * Please enable docker manually.  \e[0;0m "
+      echo "adding group docker..."
+      (getent group docker || groupadd docker) > /dev/null 2>&1
+      echo "adding $Daemonuser..."
+      id $Daemonuser > /dev/null 2>&1 || useradd -d $Daemondir -g docker $Daemonuser > /dev/null 2>&1
+      echo "installing docker-py if not present..."
+      (python -c "import docker" || pip install docker-py) > /dev/null 2>&1
+      echo "adding cronjob to plancton's crontab..."
+      echo "@reboot /opt/plancton/run/run.sh" > /tmp/tempcron
+      crontab -u $Daemonuser /tmp/tempcron
+      rm /tmp/tempcron; mkdir -p $Daemondir
+      chown -R $Daemonuser $Daemondir
+      if [[ "$MANUAL_DOCKER_INSTALL" == "yes" ]]; then
+         echo -e " \e[1;91m * Please install docker manually\e[m"
+         false
+      elif [[ "$MANUAL_DOCKER_RESTART" == "yes" ]]; then
+         echo -e " \e[1;91m * Please start/restart docker manually\e[m"
+         false
+      elif [[ "$MANUAL_DOCKER_ENABLE" == "yes" ]]; then
+         echo -e " \e[1;33m * Please enable docker manually.\e[m"
+      fi
+   )
+   if [[ $? != 0 ]]; then
+     echo -e "\e[1;91mlast step has failed\e[m"
+     exit 1
    fi
 
-   $bash_c "su $Daemonuser -c 'bash <(curl -sSL https://raw.githubusercontent.com/mconcas/plancton/master/run/plancton-start)'"
+   echo "getting plancton..."
+   cd /
+   [[ ! -d $Daemondir/git/.git ]] && su $Daemonuser -c "git clone https://github.com/mconcas/plancton $Daemondir/git"
 
+   echo "starting plancton..."
+   su $Daemonuser -c $Daemondir/git/run/plancton-start
 }
 
 # Entry point
 main
-unset Daemondir
-unset Rundir
-unset Basename
-unset Daemonuser
