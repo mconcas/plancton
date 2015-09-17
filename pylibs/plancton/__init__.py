@@ -50,7 +50,7 @@ class Plancton(Daemon):
     #  @param logdir      Directory with logfiles (rotated)
     #  @param socket      Unix socket exposed by docker
     #  @param url         GitHub conf repository, we are currently using GitHub API
-    def __init__(self, name, pidfile, logdir, socket='unix://var/run/docker.sock',
+    def __init__(self, name, pidfile, logdir, confdir, socket='unix://var/run/docker.sock',
             wurl='https://api.github.com/repos/mconcas/plancton/contents/conf/worker_centos6.json',
             purl='https://api.github.com/repos/mconcas/plancton/contents/conf/plancton-policies'):
         super(Plancton, self).__init__(name, pidfile)
@@ -61,6 +61,7 @@ class Plancton(Daemon):
         self.uptime0,self.idletime0 = _cpu_times()
         self._tolerance_counter=5
         self._logdir = logdir
+        self._confdir = confdir
         self.sockpath = socket
         # worker config location.
         self.cfg_url = wurl
@@ -435,6 +436,7 @@ class Plancton(Daemon):
     #
     #   @return Nothing
     def main_loop(self):
+        self.logctl.debug("=========> %s" % self._confdir)
         self._set_cpu_efficiency()
         whattimeisit = _utc_time()
         delta_1 = whattimeisit - self._last_confup_time

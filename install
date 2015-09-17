@@ -30,6 +30,11 @@ function testreq() {
 }
 
 function main() {
+   conf_branch="$1"
+   if [[ "$conf_branch" == '' ]]; then
+      echo -e "\e[1;91mPlease specify the configuration branch to use.\e[m"
+      exit 1
+   fi
    bash_c='bash -c'
    if [[ $(id -u) != "0" ]]; then
       if testcmd sudo; then
@@ -100,9 +105,13 @@ function main() {
    cd /
    [[ ! -d $Daemondir/git/.git ]] && su $Daemonuser -c "git clone https://github.com/mconcas/plancton $Daemondir/git"
 
+   echo "getting plancton configuration $conf_branch..."
+   su $Daemonuser -c "mkdir -p $Daemondir/.plancton"
+   [[ ! -d $Daemondir/.plancton/conf/.git ]] && su $Daemonuser -c "git clone -b $conf_branch https://github.com/mconcas/voluntary-config $Daemondir/.plancton/conf"
+
    echo "starting plancton..."
    su $Daemonuser -c $Daemondir/git/run/plancton-start
 }
 
 # Entry point
-main
+main "$1"
