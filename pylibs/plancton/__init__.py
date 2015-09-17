@@ -15,6 +15,7 @@ from datetime import datetime
 from daemon import Daemon
 from docker import Client
 import requests.exceptions
+import yaml
 
 
 # Unefficent Utility functions
@@ -106,6 +107,24 @@ class Plancton(Daemon):
         log_file_handler.doRollover()
         self.logctl.setLevel(10)
         self.logctl.addHandler(log_file_handler)
+
+    def _read_conf(self):
+        conf = {}
+        try:
+            with open(self._confdir+"/config.yaml") as fp:
+                conf = yaml.safe_load(fp.read())
+            self.logctl.debug(conf)
+        except Exception as e:
+            self.logctl.error("Cannot read configuration file %s/config.yaml: %s" % (self._confdir, e))
+        self._pilot_entrypoint = conf.get("pilot_entrypoint", "/bin/bash")
+        self._pilot_dock = conf.get("pilot_dock", "centos:centos6")
+        self._cpus_per_dock = float(conf.get("cpus_per_dock", 1))
+        ncpus = _cpu_count()
+        self._max_docks = int(eval(str(conf.get("max_docks", "ncpus - 2"))))
+        self.logctl.debug("Docker container: %s" % self._pilot_dock)
+        self.logctl.debug("Container entrypoint: %s" % self._pilot_entrypoint)
+        self.logctl.debug("CPUs per container: %f" % self._cpus_per_dock)
+        self.logctl.debug("Max number of containers: %d" % self._max_docks)
 
     def _uptime(self):
         return _utc_time() - self._start_time
@@ -419,6 +438,7 @@ class Plancton(Daemon):
 
     def init(self):
         self._setup_log_files()
+        self._read_conf()
         self.logctl.info('---- plancton daemon v%s ----' % self.__version__)
         self._refresh_internal_list()
         self._get_online_config()
@@ -436,7 +456,6 @@ class Plancton(Daemon):
     #
     #   @return Nothing
     def main_loop(self):
-        self.logctl.debug("=========> %s" % self._confdir)
         self._set_cpu_efficiency()
         whattimeisit = _utc_time()
         delta_1 = whattimeisit - self._last_confup_time
