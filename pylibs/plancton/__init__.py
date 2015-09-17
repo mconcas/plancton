@@ -29,7 +29,7 @@ def _pid_exists(pid):
     else:
         return True
 
-def _cpu_num():
+def _cpu_count():
     return sum([ 1 for x in open('/proc/cpuinfo') if "bogomips" in x ]) #yolo
 
 def _cpu_times():
@@ -67,7 +67,7 @@ class Plancton(Daemon):
         # policies location
         self.pol_url = purl
         # CPU numbers.
-        self._cpu_number = _cpu_num()
+        self._num_cpus = _cpu_count()
         # Requests session.
         self._https_session = requests.Session()
         # JSON container settings
@@ -113,28 +113,18 @@ class Plancton(Daemon):
     #  uptime.
     #
     #  @return cpu_efficiency or zero in case of a negative efficiency.
-    def _get_cpu_efficiency(self):
-        eff = 0.0
+    def _set_cpu_efficiency(self):
         curruptime,curridletime = _cpu_times()
         deltaup = curruptime - self.uptime0
         deltaidle = curridletime - self.idletime0
-        try:
-            eff = float((deltaup*self._cpu_number - deltaidle)*100) / float(deltaup*self._cpu_number)
-            self.uptime0 = curruptime
-            self.idletime0 = curridletime
-        except ZeroDivisionError:
-            time.sleep(10)
-            self._get_cpu_efficiency()
-
-        return eff if eff > 0 else 0.0
-
-    def _valid_efficiency(self, thresh=60):
-        efficiency = self._get_cpu_efficiency()
-        return efficiency if self._uptime() > thresh else 0.0
+        eff = float((deltaup*self._num_cpus - deltaidle)*100) / float(deltaup*self._num_cpus)
+        self.uptime0 = curruptime
+        self.idletime0 = curridletime
+        self.efficiency = eff if eff > 0 else 0.0
 
     def _overhead_control(self, loopthr=1, cputhreshold=70):
         self._refresh_internal_list()
-        if self._valid_efficiency() > cputhreshold and self._control_containers() > 0:
+        if self.efficiency > cputhreshold and self._control_containers() > 0:
             self.logctl.warning('CPU overhead exceeded the threshold at the last measurement.')
             self._overhead_tol_counter = self._overhead_tol_counter+1
             if self._overhead_tol_counter >= loopthr:
@@ -445,6 +435,7 @@ class Plancton(Daemon):
     #
     #   @return Nothing
     def main_loop(self):
+        self._set_cpu_efficiency()
         whattimeisit = _utc_time()
         delta_1 = whattimeisit - self._last_confup_time
         delta_2 = whattimeisit - self._last_update_time
@@ -457,9 +448,8 @@ class Plancton(Daemon):
 
         self._refresh_internal_list()
         running = self._control_containers()
-        efficiency = self._valid_efficiency()
-        self.logctl.debug('CPU efficiency: %10.f ' % efficiency)
-        while (_cpu_num() - 0 ) > int(running) and efficiency < 75.0:
+        self.logctl.debug('CPU efficiency: %.2f%%' % self.efficiency)
+        while (self._num_cpus - 0 ) > int(running) and self.efficiency < 75.0:
             self._deploy_container()
             running = running+1
         self._last_update_time = _utc_time()
@@ -475,7 +465,7 @@ class Plancton(Daemon):
         while self._do_main_loop:
             count = 0
             self.main_loop()
-            while self._do_main_loop and count < 60:
+            while self._do_main_loop and count < 30:
                 time.sleep(1)
                 count = count+1
 
