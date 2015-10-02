@@ -11,7 +11,7 @@
       "/tmp/condor-centos6-worker-pilot"
       ],
     "Image": "mconcas/centos6-autobuild-container:latest",
-    "Binds": ["/opt/plancton/.plancton/conf/condor-configuration/10_common.config:/etc/condor/config.d/10_common.config", "/opt/plancton/.plancton/conf/condor-configuration/00_worker.config:/etc/condor/config.d/00_worker.config", "/opt/plancton/.plancton/conf/condor-configuration/condor_config:/etc/condor/config.d/condor_config" ]
+    "Binds": ["/opt/plancton/.plancton/conf/condor-configuration/10_common.config:/etc/condor/config.d/10_common.config", "/opt/plancton/.plancton/conf/condor-configuration/00_worker.config:/etc/condor/config.d/00_worker.config", "/opt/plancton/.plancton/conf/condor-configuration/condor_config:/etc/condor/config.d/condor_config" ],
     "WorkingDir": "/",
     "NetworkDisabled": false,
     "ExposedPorts": {},
