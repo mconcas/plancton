@@ -1,4 +1,3 @@
-
 # -*- coding: utf-8 -*-
 import base64
 import docker
@@ -42,7 +41,7 @@ def _utc_time():
 class Plancton(Daemon):
 
     ## Current version of plancton
-    __version__ = '0.3.1'
+    __version__ = '0.3.2'
 
     ## Constructor.
     #
@@ -51,9 +50,7 @@ class Plancton(Daemon):
     #  @param logdir      Directory with logfiles (rotated)
     #  @param socket      Unix socket exposed by docker
     #  @param url         GitHub conf repository, we are currently using GitHub API
-    def __init__(self, name, pidfile, logdir, confdir, socket='unix://var/run/docker.sock',
-            wurl='https://api.github.com/repos/mconcas/plancton/contents/conf/worker_centos6.json',
-            purl='https://api.github.com/repos/mconcas/plancton/contents/conf/plancton-policies'):
+    def __init__(self, name, pidfile, logdir, confdir, socket='unix://var/run/docker.sock'):
         super(Plancton, self).__init__(name, pidfile)
 
         # Start time in UTC
@@ -64,10 +61,6 @@ class Plancton(Daemon):
         self._logdir = logdir
         self._confdir = confdir
         self.sockpath = socket
-        # worker config location.
-        self.cfg_url = wurl
-        # policies location
-        self.pol_url = purl
         # CPU numbers.
         self._num_cpus = _cpu_count()
         # Requests session.
@@ -84,6 +77,7 @@ class Plancton(Daemon):
                 'updateinterval' : 65,
                 'updateconfig'   : 3600,
                 },
+            'configuration' : {},
             'containers' : {}
             }
         #  flag to force a control
@@ -93,7 +87,7 @@ class Plancton(Daemon):
 
     ## Setup use of logfiles, rotated and deleted periodically.
     #
-    #  @return Nothing is returned
+    #  @return Nothing is returned.
     def _setup_log_files(self):
         if not os.path.isdir(self._logdir):
             os.mkdir(self._logdir, 0700)
@@ -107,7 +101,10 @@ class Plancton(Daemon):
         log_file_handler.doRollover()
         self.logctl.setLevel(10)
         self.logctl.addHandler(log_file_handler)
-
+    
+    ## Read configuration from file
+    #
+    #  @return Nothing is returned.
     def _read_conf(self):
         conf = {}
         try:
@@ -121,10 +118,24 @@ class Plancton(Daemon):
         self._cpus_per_dock = float(conf.get("cpus_per_dock", 1))
         ncpus = _cpu_count()
         self._max_docks = int(eval(str(conf.get("max_docks", "ncpus - 2"))))
+        self._cpu_shares = self._cpus_per_dock*1024/ncpus
+        self._condor_conf_list = conf.get("dock_condor_conf", [])
+       	
         self.logctl.debug("Docker container: %s" % self._pilot_dock)
         self.logctl.debug("Container entrypoint: %s" % self._pilot_entrypoint)
         self.logctl.debug("CPUs per container: %f" % self._cpus_per_dock)
         self.logctl.debug("Max number of containers: %d" % self._max_docks)
+        self.logctl.debug("Condor config dictionary: \n %s" % self._condor_conf_list)
+        
+        self._int_st['daemon']['maxcontainers'] = self._max_docks
+        self._int_st['configuration'] = { 'Cmd': [ self._pilot_entrypoint ],
+                                          'Image': self._pilot_dock,
+                                          'HostConfig': { 'CpuShares': int(self._cpu_shares),
+                                                          'NetworkMode':'bridge',
+                                                          'Binds': self._condor_conf_list
+                                                        }
+                                        } 
+        self.logctl.debug(self._int_st)
 
     def _uptime(self):
         return _utc_time() - self._start_time
@@ -132,7 +143,7 @@ class Plancton(Daemon):
     ## Get CPU efficiency percentage. Efficiency is calculated subtracting idletime per cpu to
     #  uptime.
     #
-    #  @return cpu_efficiency or zero in case of a negative efficiency.
+    #  @return zero in case of a negative efficiency.
     def _set_cpu_efficiency(self):
         curruptime,curridletime = _cpu_times()
         deltaup = curruptime - self.uptime0
@@ -166,42 +177,6 @@ class Plancton(Daemon):
             else:
                 self._overhead_tol_counter=0
 
-
-
-    ## Git API get request wrapper.
-    #
-    # @return json data found at the 'content' key by default.
-    def _git_API_get(self, url, key='content', encoded=True):
-        try:
-            httpsreq = self._https_session.get(url)
-            httpsreq.raise_for_status()
-            value = json.loads(httpsreq.content)[key]
-            if value and encoded:
-                jdata = json.loads(base64.b64decode(value))
-            elif value and not encoded:
-                jdata = json.loads(value)
-            else:
-                self.logctl.warning('Empty string or \'content\' not found.')
-                jdata = None
-
-            return jdata
-
-        except Exception as e:
-            self.logctl.error(e)
-
-            return None
-
-    ## Download configuration online. In a general implementation one could
-    #  modify this function to properly fit his tastes.
-    #
-    #  @return True if the request success, False otherwise.
-    def _get_online_config(self):
-        self.logctl.info('...downlaoding online configuration... ')
-        self.logctl.info(' - container config: %s ' % self.cfg_url)
-        self.logctl.info(' - policies: %s ' % self.pol_url)
-        self._cont_config = self._git_API_get(self.cfg_url)
-        self._policies_json = self._git_API_get(self.pol_url)
-
     ## Just a dummy check if the docker deamon is running.
     #
     #  @return True if the request sucess, False otherwise.
@@ -218,12 +193,12 @@ class Plancton(Daemon):
             return False
 
     ## Fetch a specified image from a trusted registry getting image:tag from repo,tagname args or
-    #  as a default, from the conf. json; if the current image is already up-to-date it continues.
+    #  as a default, from the conf. json; if the current image is already up-to-date it continues.
     #
     #  @return True if the request sucess, False otherwise.
     def _pull_image(self, repo=None, tagname='latest'):
         if not repo:
-            repository, tag = str(self._cont_config['Image']).split(':')
+            repository, tag = self._pilot_dock.split(':')
         else:
             repository = repo
             tag = tagname
@@ -250,10 +225,10 @@ class Plancton(Daemon):
                 + string.ascii_lowercase) for _ in range(6))
 
             self.logctl.debug('Creating container with name %s. ' % cname)
-            tmpcont = self.docker_client.create_container_from_config(jconfig, name=cname)
+            self.logctl.debug('JSON DUMP: %s' % json.loads(json.dumps(self._int_st['configuration'])))
+            tmpcont = self.docker_client.create_container_from_config(json.loads(json.dumps(self._int_st['configuration'])), name=cname)
         except Exception as e:
-            self.logctl.error('Couldn\'t create the container! ')
-            self.logctl.error(e)
+            self.logctl.error('Couldn\'t create the container! %s', e)
 
             return None
         else:
@@ -368,8 +343,8 @@ class Plancton(Daemon):
         self.logctl.info('-------------------------------------------------------------------')
         for i,j in self._int_st['containers'].iteritems():
             self.logctl.info( '| %s  |  %s  |  %s  | %s | %s  |' \
-                % (self._int_st['containers'].keys().index(i) + 1, i[:12],
-                j['status'], j['name'], j['pid']))
+                % (self._int_st['containers'].keys().index(i) + 1, i[:12], j['status'], 
+                j['name'], j['pid']))
         self.logctl.info('-------------------------------------------------------------------')
 
     ## This is the CController it gets rid of exceeded ttl or exited/created (read 'not started')
@@ -398,7 +373,6 @@ class Plancton(Daemon):
                     self.logctl.error(e)
                 else:
                     self.logctl.debug('Removed %s successfully.' % i)
-
             self._refresh_internal_list(name)
 
         return len(self._int_st['containers'])
@@ -441,7 +415,6 @@ class Plancton(Daemon):
         self._read_conf()
         self.logctl.info('---- plancton daemon v%s ----' % self.__version__)
         self._refresh_internal_list()
-        self._get_online_config()
         self._pull_image()
         self._control_containers()
         self._get_setup_info()
@@ -463,14 +436,11 @@ class Plancton(Daemon):
         self._overhead_control()
         if (delta_1 >= int(self._int_st['daemon']['updateconfig'])):
             self._pull_image()
-            self._get_online_config()
             self._last_confup_time = _utc_time()
-        # if (delta_2 >= int(self._int_st['daemon']['updateinterval'])) or self._updateflag:
-
         self._refresh_internal_list()
         running = self._control_containers()
         self.logctl.debug('CPU efficiency: %.2f%%' % self.efficiency)
-        while (self._num_cpus - 0 ) > int(running) and self.efficiency < 75.0:
+        while (self._max_docks) > int(running) and self.efficiency < 75.0:
             self._deploy_container()
             running = running+1
         self._last_update_time = _utc_time()
