@@ -17,7 +17,10 @@ import requests.exceptions
 import yaml
 
 
-# Unefficent Utility functions
+# Unefficient Utility functions
+def _min(val1, val2):
+   return val1 if (val1<val2) else val2
+
 def _pid_exists(pid):
     try:
         os.kill(pid,0)
@@ -42,13 +45,16 @@ class Plancton(Daemon):
 
     ## Current version of plancton
     __version__ = '0.3.2'
-
+    
+    @property
+    def idle(self):
+       return float(100 - self.efficiency)
     ## Constructor.
     #
     #  @param name        Daemon name
     #  @param pidfile     File where PID is written
     #  @param logdir      Directory with logfiles (rotated)
-    #  @param socket      Unix socket exposed by docker
+    #  @param scket      Unix socket exposed by docker
     #  @param url         GitHub conf repository, we are currently using GitHub API
     def __init__(self, name, pidfile, logdir, confdir, socket='unix://var/run/docker.sock'):
         super(Plancton, self).__init__(name, pidfile)
@@ -121,11 +127,11 @@ class Plancton(Daemon):
         self._cpu_shares = self._cpus_per_dock*1024/ncpus
         self._condor_conf_list = conf.get("dock_condor_conf", [])
        	
-        self.logctl.debug("Docker container: %s" % self._pilot_dock)
-        self.logctl.debug("Container entrypoint: %s" % self._pilot_entrypoint)
-        self.logctl.debug("CPUs per container: %f" % self._cpus_per_dock)
-        self.logctl.debug("Max number of containers: %d" % self._max_docks)
-        self.logctl.debug("Condor config dictionary: \n %s" % self._condor_conf_list)
+        #self.logctl.debug("Docker container: %s" % self._pilot_dock)
+        #self.logctl.debug("Container entrypoint: %s" % self._pilot_entrypoint)
+        #self.logctl.debug("CPUs per container: %f" % self._cpus_per_dock)
+        #self.logctl.debug("Max number of containers: %d" % self._max_docks)
+        #self.logctl.debug("Condor config dictionary: \n %s" % self._condor_conf_list)
         
         self._int_st['daemon']['maxcontainers'] = self._max_docks
         self._int_st['configuration'] = { 'Cmd': [ self._pilot_entrypoint ],
@@ -225,7 +231,6 @@ class Plancton(Daemon):
                 + string.ascii_lowercase) for _ in range(6))
 
             self.logctl.debug('Creating container with name %s. ' % cname)
-            self.logctl.debug('JSON DUMP: %s' % json.loads(json.dumps(self._int_st['configuration'])))
             tmpcont = self.docker_client.create_container_from_config(json.loads(json.dumps(self._int_st['configuration'])), name=cname)
         except Exception as e:
             self.logctl.error('Couldn\'t create the container! %s', e)
@@ -380,7 +385,7 @@ class Plancton(Daemon):
     ## Gracefully exiting, plancton kills all the owned containers.
     #
     # @return True if all containers are correctly deleted, False otherwise.
-    def _jump_ship(self, name='plancton-slave'):
+    def _jump_ship(self, drastic=False, name='plancton-slave'):
         ret = True
         self.logctl.warning('Every man for himself, abandon ship!')
         jdata = self.docker_client.containers(all=True)
@@ -440,9 +445,15 @@ class Plancton(Daemon):
         self._refresh_internal_list()
         running = self._control_containers()
         self.logctl.debug('CPU efficiency: %.2f%%' % self.efficiency)
-        while (self._max_docks) > int(running) and self.efficiency < 75.0:
-            self._deploy_container()
-            running = running+1
+        self.logctl.debug('CPU available:  %.2f%%' % self.idle)
+        self.logctl.debug('Potentially fitting docks: %d' % int(self.idle*0.95*self._num_cpus/(self._cpus_per_dock*100)))
+        launchable_containers = _min(int(self.idle*0.95*self._num_cpus/(self._cpus_per_dock*100)), int(self._max_docks-int(running)))
+        self.logctl.debug('Launchable docks: %d ' % launchable_containers) 
+        for i in range(launchable_containers):
+           self._deploy_container()
+        #while (self._max_docks) > int(running) and self.efficiency < 75.0:
+        #    self._deploy_container()
+        #    running = running+1
         self._last_update_time = _utc_time()
         self._control_containers()
         self._updateflag = False
