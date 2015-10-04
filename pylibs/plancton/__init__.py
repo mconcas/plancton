@@ -125,13 +125,15 @@ class Plancton(Daemon):
         ncpus = _cpu_count()
         self._max_docks = int(eval(str(conf.get("max_docks", "ncpus - 2"))))
         self._cpu_shares = self._cpus_per_dock*1024/ncpus
-        self._condor_conf_list = conf.get("dock_condor_conf", [])
-       	
+        condor_conf_dict = conf.get("dock_condor_conf", {})
+        self._condor_conf_list = [ condor_conf_dict['condor_common_conf'] + ':/etc/condor/config.d/10-common.config',
+                                   condor_conf_dict['condor_worknode_conf'] + ':/etc/condor/config.d/00-worker.config',
+                                   condor_conf_dict['condor_base_conf'] + ':/etc/condor/condor_config' ]	
         #self.logctl.debug("Docker container: %s" % self._pilot_dock)
         #self.logctl.debug("Container entrypoint: %s" % self._pilot_entrypoint)
         #self.logctl.debug("CPUs per container: %f" % self._cpus_per_dock)
         #self.logctl.debug("Max number of containers: %d" % self._max_docks)
-        #self.logctl.debug("Condor config dictionary: \n %s" % self._condor_conf_list)
+        self.logctl.debug("Condor config dictionary: \n %s" % self._condor_conf_list)
         
         self._int_st['daemon']['maxcontainers'] = self._max_docks
         self._int_st['configuration'] = { 'Cmd': [ self._pilot_entrypoint ],
