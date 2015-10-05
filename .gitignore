@@ -1,4 +1,5 @@
 scratch
 *.pyc
 .DS_Store
+*.swp
 
