@@ -82,7 +82,9 @@ class Plancton(Daemon):
                 'version'        : self.__version__,
                 'updateinterval' : 65,
                 'updateconfig'   : 3600,
-                },
+                'rigidity'       : 10,
+                'morbidity'      : 30  
+            },
             'configuration' : {},
             'containers' : {}
             }
@@ -128,14 +130,36 @@ class Plancton(Daemon):
         condor_conf_dict = conf.get("dock_condor_conf", {})
         self._condor_conf_list = [ condor_conf_dict['condor_common_conf'] + ':/etc/condor/config.d/10-common.config',
                                    condor_conf_dict['condor_worknode_conf'] + ':/etc/condor/config.d/00-worker.config',
-                                   condor_conf_dict['condor_base_conf'] + ':/etc/condor/condor_config' ]	
-        #self.logctl.debug("Docker container: %s" % self._pilot_dock)
-        #self.logctl.debug("Container entrypoint: %s" % self._pilot_entrypoint)
-        #self.logctl.debug("CPUs per container: %f" % self._cpus_per_dock)
-        #self.logctl.debug("Max number of containers: %d" % self._max_docks)
-        self.logctl.debug("Condor config dictionary: \n %s" % self._condor_conf_list)
-        
+                                   condor_conf_dict['condor_base_conf'] + ':/etc/condor/condor_config' 
+                                 ]	
         self._int_st['daemon']['maxcontainers'] = self._max_docks
+        self._int_st['daemon']['cputhresh'] = conf.get("cputhresh", "75")
+       
+        # How  much the daemon will wait before updating the status of containers.
+        upint = conf.get("morbidity", "medium")
+        if 'soft' in upint:
+           self._int_st['daemon']['morbidity'] = 120
+        elif 'medium' in upint:
+           self._int_st['daemon']['morbidity'] = 60
+        elif 'hard' in upint:
+           self._int_st['daemon']['morbidity'] = 30 
+        else:
+           self.logctl.warning('Setting morbidity to default: hard')
+           self._int_st['daemon']['morbidity'] = 30
+        
+        # How many times the daemon will check before reaping a container.
+        rigid = str(conf.get("rigidity", "soft"))
+        if 'soft' in rigid:
+           self._int_st['daemon']['rigidity'] = 10
+        elif 'medium' in rigid:
+           self._int_st['daemon']['rigidity'] = 5
+        elif 'hard' in rigid:
+           self._int_st['daemon']['rigidity'] = 1
+        else:
+           # this should not occur.
+           self.logctl.warning("Setting rigidity to default: soft.")
+           self._int_st['daemon']['rigidity'] = 10
+
         self._int_st['configuration'] = { 'Cmd': [ self._pilot_entrypoint ],
                                           'Image': self._pilot_dock,
                                           'HostConfig': { 'CpuShares': int(self._cpu_shares),
@@ -161,12 +185,12 @@ class Plancton(Daemon):
         self.idletime0 = curridletime
         self.efficiency = eff if eff > 0 else 0.0
 
-    def _overhead_control(self, loopthr=1, cputhreshold=70):
+    def _overhead_control(self, cputhreshold=70):
         self._refresh_internal_list()
         if self.efficiency > cputhreshold and self._control_containers() > 0:
             self.logctl.warning('CPU overhead exceeded the threshold at the last measurement.')
             self._overhead_tol_counter = self._overhead_tol_counter+1
-            if self._overhead_tol_counter >= loopthr:
+            if self._overhead_tol_counter >= self._int_st['daemon']['rigidity']:
                 unsrtgreylist = []
                 for i,j in self._int_st['containers'].iteritems():
                     if 'running' in str(self._int_st['containers'][i]['status']):
@@ -233,7 +257,8 @@ class Plancton(Daemon):
                 + string.ascii_lowercase) for _ in range(6))
 
             self.logctl.debug('Creating container with name %s. ' % cname)
-            tmpcont = self.docker_client.create_container_from_config(json.loads(json.dumps(self._int_st['configuration'])), name=cname)
+            tmpcont = self.docker_client.create_container_from_config( \
+               json.loads(json.dumps(self._int_st['configuration'])), name=cname)
         except Exception as e:
             self.logctl.error('Couldn\'t create the container! %s', e)
 
@@ -284,7 +309,7 @@ class Plancton(Daemon):
     # @return Nothing
     def _deploy_container(self, cname='plancton-slave'):
         self._start_container(self._create_container_by_name(cname_prefix=cname, \
-            jconfig=self._cont_config))
+            jconfig=json.loads(json.dumps(self._int_st['configuration']))))
 
     ## Update internal status.
     #
@@ -428,7 +453,7 @@ class Plancton(Daemon):
         self._do_main_loop = True
 
     ##  Daemon's main loop.
-    #   Perfroms an image pull/update at startup and every 'delta' seconds.
+    #   Performs an image pull/update at startup and every 'delta' seconds.
     #   The APIs guarantee by their own that if the image is up-to-date it wouldn't
     #   be re-downloaded, this way I want to reduce the requests number, though.
     #   Moreover once the control is set one can schedule more features, like update-checks
@@ -453,9 +478,6 @@ class Plancton(Daemon):
         self.logctl.debug('Launchable docks: %d ' % launchable_containers) 
         for i in range(launchable_containers):
            self._deploy_container()
-        #while (self._max_docks) > int(running) and self.efficiency < 75.0:
-        #    self._deploy_container()
-        #    running = running+1
         self._last_update_time = _utc_time()
         self._control_containers()
         self._updateflag = False
@@ -469,7 +491,7 @@ class Plancton(Daemon):
         while self._do_main_loop:
             count = 0
             self.main_loop()
-            while self._do_main_loop and count < 30:
+            while self._do_main_loop and count < self._int_st['daemon']['morbidity']:
                 time.sleep(1)
                 count = count+1
 
