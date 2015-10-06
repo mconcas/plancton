@@ -54,7 +54,7 @@ function main() {
    testreq git pip
    if ! testcmd docker; then
       echo "docker-engine not found, trying to install it automatically..."
-      if (curl -sSL https://get.docker.com/ | sh); then
+      if ! (curl -sSL https://get.docker.com/ | sh); then
          echo "[Failed] You have to install docker-engine manually to continue."
          MANUAL_DOCKER_INSTALL=yes
          exit 1
