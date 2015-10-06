@@ -88,8 +88,6 @@ class Plancton(Daemon):
             'configuration' : {},
             'containers' : {}
             }
-        #  flag to force a control
-        self._updateflag = True
         # Overhead tolerance
         self._overhead_tol_counter = 0
 
@@ -188,8 +186,9 @@ class Plancton(Daemon):
     def _overhead_control(self, cputhreshold=70):
         self._refresh_internal_list()
         if self.efficiency > cputhreshold and self._control_containers() > 0:
-            self.logctl.warning('CPU overhead exceeded the threshold at the last measurement.')
             self._overhead_tol_counter = self._overhead_tol_counter+1
+            self.logctl.warning('CPU overhead exceeded the threshold at the last %d measurements.' %\
+                self._overhead_tol_counter)
             if self._overhead_tol_counter >= self._int_st['daemon']['rigidity']:
                 unsrtgreylist = []
                 for i,j in self._int_st['containers'].iteritems():
@@ -301,7 +300,7 @@ class Plancton(Daemon):
             else:
                 self.logctl.error('Not running process found for %s with pid: %s.'
                     % (container['Id'], jj['State']['Pid']))
-
+                self._int_st['containers'][container['Id']]['pid'] = -1
                 return None
 
     ## Deploy a container.
@@ -346,7 +345,10 @@ class Plancton(Daemon):
                         try:
                             jj = self.docker_client.inspect_container(jdata[i]['Id'])
                             # get pid
-                            self._int_st['containers'][jdata[i]['Id']]['pid'] = jj['State']['Pid']
+                            if _pid_exists(jj['State']['Pid']):
+                               self._int_st['containers'][jdata[i]['Id']]['pid'] = jj['State']['Pid']
+                            else:
+                               self._int_st['containers'][jdata[i]['Id']]['pid'] = -1
                             # get brithday
                             self._int_st['containers'][jdata[i]['Id']]['startedat'] = \
                                 str(jj['State']['StartedAt'])
@@ -376,7 +378,7 @@ class Plancton(Daemon):
         for i,j in self._int_st['containers'].iteritems():
             self.logctl.info( '| %s  |  %s  |  %s  | %s | %s  |' \
                 % (self._int_st['containers'].keys().index(i) + 1, i[:12], j['status'], 
-                j['name'], j['pid']))
+                j['name'], j.get('pid', '!NONE!')))
         self.logctl.info('-------------------------------------------------------------------')
 
     ## This is the CController it gets rid of exceeded ttl or exited/created (read 'not started')
@@ -479,8 +481,7 @@ class Plancton(Daemon):
         for i in range(launchable_containers):
            self._deploy_container()
         self._last_update_time = _utc_time()
-        self._control_containers()
-        self._updateflag = False
+        # self._control_containers()
         self._print_info()
 
     ##  Daemon's main function.

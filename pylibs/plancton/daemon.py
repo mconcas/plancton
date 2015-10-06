@@ -221,7 +221,7 @@ class Daemon(object):
     #          running: an example of success is when the daemon wasn't running and `stop()` is
     #          called. False is returned otherwise
     def stop(self):
-        self.logctl.info('stopping')
+        self.logctl.info('stopping, this may take a while...')
         # Get the pid from the pidfile
         self.readPid()
         if not self.isRunning():
