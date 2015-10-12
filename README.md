@@ -25,7 +25,7 @@ After that you are ready to run the automated build and run script.
 As `root` run:
 
 ```bash
-#> bash -x <(curl https://raw.githubusercontent.com/mconcas/plancton/master/install) <specific-tag>  
+~#> bash -x <(curl https://raw.githubusercontent.com/mconcas/plancton/master/install) <specific-tag>  
 ```
 where `<specific-tag>` is referred to a tag of a git repository your production environment (see
    the admin guide for further information).
