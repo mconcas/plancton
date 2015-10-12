@@ -27,7 +27,8 @@ As `root` run:
 ```bash
 [root@volunteer-host]# bash -x <(curl https://raw.githubusercontent.com/mconcas/plancton/master/install) <specific-tag>  
 ```
-where `<specific-tag>` is referred to your production environment.
+where `<specific-tag>` is referred to a tag of a git repository your production environment (see
+   the admin guide for further information).
 
 ## Rationale
 Since Plancton thought as a part of a
@@ -54,7 +55,7 @@ dynamically fit available resources spawning containers (the overhead amount and
    These come with a pilot executable script as entry point. This script patiently waits for a job to be assigned
    for a fixed time then shut down itself. After doing the garbage collection, Plancton can spawn other
    containers, if fitting, and so on.
-Thus one can grant an armonic use of resources.  
+Thus one can grant an harmonic use of resources.  
 On the other hand in case the host owner reclaims *his* computing resources Plancton automatically detect it and
 more or less (customizable) quickly is able to shut down its containers to release the *cpu-shares* of the host.
 
