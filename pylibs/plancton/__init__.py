@@ -397,14 +397,24 @@ class Plancton(Daemon):
                     try:
                         self.docker_client.remove_container(i, force=True)
                     except Exception as e:
+                        # It may happen that this command goes in racing condition with manual
+                        # container deletion, since it's not a big deal, I opted for a more permissive approach.
+                        # That is not to critically stop the daemon, but simply update internal status and wait for the
+                        # next garbage collection.
+                        self.logctl.warning('It couldn\'t be possible to remove the container with id: %s ' % i)
                         self.logctl.error(e)
+                        self._refresh_internal_list(name)
+                        pass
                     else:
                         self.logctl.debug('Removed %s successfully.' % i)
             else:
                 try:
                     self.docker_client.remove_container(i, force=True)
                 except Exception as e:
+                    self.logctl.warning('It couldn\'t be possible to remove the container with id: %s ' % i)
                     self.logctl.error(e)
+                    self._refresh_internal_list(name)
+                    pass
                 else:
                     self.logctl.debug('Removed %s successfully.' % i)
             self._refresh_internal_list(name)
