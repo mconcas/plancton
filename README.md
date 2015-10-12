@@ -1,6 +1,6 @@
 # Plancton: a docker&condor-based volunteer computing project.
 
-Plancton is a daemonized script written in python.  
+Plancton is a *daemonized* script written in Python.  
 Its aim is to provide, manage and control a pool of docker containers
 ([HTCondor](https://research.cs.wisc.edu/htcondor/) worker nodes) on a given volunteer host.  
 Thus, with just [docker-engine](https://www.docker.com/) and [Plancton](https://github.com/mconcas/plancton) as
@@ -21,17 +21,16 @@ module.
 3. **docker** is provided by the installation script, wrapping around the
 [official](https://docs.docker.com/installation/) installation procedure.
 
-After that you are rady to run the autamated build and run script.
-As `root` user run:
+After that you are ready to run the automated build and run script.
+As `root` run:
 
 ```bash
-[root@volunteer-host]# bash -x <(curl https://raw.githubusercontent.com/mconcas/plancton/master/install)
-<specific-tag>  
+[root@volunteer-host]# bash -x <(curl https://raw.githubusercontent.com/mconcas/plancton/master/install) <specific-tag>  
 ```
 where `<specific-tag>` is referred to your production environment.
 
 ## Rationale
-Since at least in the first approach this thought as a part of a
+Since Plancton thought as a part of a
 **[volunteer project](https://en.wikipedia.org/wiki/Volunteer_computing)**, we should consider a set of
 constraints/limitations both in project, development and production phase.  
 *   First of all we have to strongly keep in mind that even the installation could be done with administration
