@@ -13,12 +13,12 @@ Plancton is based on the [docker-py](https://github.com/docker/docker-py) Python
 ## Installation - User guide
 
 ### To be installed, Plancton requires:
-1. **python-pip** (you can find a guide [here](http://pip.readthedocs.org/en/stable/installing/)
+1. **python-pip: ** you can find a guide [here](http://pip.readthedocs.org/en/stable/installing/)
 if it's not provided by common package managers, say `apt`, `dnf/yum`, `pacman`.  
 Please notice that without python-pip you will need to manually install the  `docker-py` module and the `pyyaml`
 module.
-2. **git** you find a guide [here](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)
-3. **docker** is provided by the installation script, wrapping around the
+2. **git: ** you find a guide [here](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)
+3. **docker: ** is provided by the installation script, wrapping around the
 [official](https://docs.docker.com/installation/) installation procedure.
 
 After that you are ready to run the automated build and run script.
