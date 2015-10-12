@@ -17,7 +17,7 @@ Plancton is based on the [docker-py](https://github.com/docker/docker-py) Python
 if it's not provided by common package managers, say `apt`, `dnf/yum`, `pacman`.  
 Please notice that without python-pip you will need to manually install the  `docker-py` module and the `pyyaml`
 module.
-2. **git**: you find a guide [here](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)
+2. **git**: you find a guide [here](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git).
 3. **docker**: is provided by the installation script, wrapping around the
 [official](https://docs.docker.com/installation/) installation procedure.
 
@@ -25,7 +25,7 @@ After that you are ready to run the automated build and run script.
 As `root` run:
 
 ```bash
-[root@volunteer-host]# bash -x <(curl https://raw.githubusercontent.com/mconcas/plancton/master/install) <specific-tag>  
+#> bash -x <(curl https://raw.githubusercontent.com/mconcas/plancton/master/install) <specific-tag>  
 ```
 where `<specific-tag>` is referred to a tag of a git repository your production environment (see
    the admin guide for further information).
