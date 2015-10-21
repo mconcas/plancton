@@ -42,7 +42,7 @@ def _utc_time():
 
 def robust(tries=5, delay=3, backoff=2):
     """ Decorator to catch requests.ConnectionError exceptions, fully customizable, its main aim is to
-        manage racing conditions and a, for some reason, unresponisve docker daemon.
+        manage racing conditions and a, for some reason, unresponsive docker daemon situations.
     """
     def robust_decorator(f):
         @wraps(f)
