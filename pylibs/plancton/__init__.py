@@ -100,7 +100,6 @@ class Plancton(Daemon):
              @param pidfile     File where PID is written                                                
              @param logdir      Directory with logfiles (rotated)                                        
              @param socket      Unix socket exposed by docker                                            
-             @param url         GitHub conf repository, we are currently using GitHub API                
         """
         super(Plancton, self).__init__(name, pidfile)
         """ Start time in UTC """
