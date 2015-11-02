@@ -38,7 +38,7 @@ constraints/limitations both in project, development and production phase.
 privileges is good practice to run software with the lowest privileges as possible, perhaps relegating the
 execution to a dedicated user (e.g. plancton) and the put the installation path in a easy-to-manage *optional*
 locations (e.g. `/opt/plancton`).  
-I won't fully justify here what a basic common sense can here imply in terms of security.  
+I won't fully justify here what a basic common sense can here explain in terms of security.  
 On the other side, since we are not able to grant a strong isolation/integrity of processes (this is due both to
    docker limitations but more trivially because the host owner has full access to his machine, thus even running
    everything as `root` would not change anything) we cannot ensure processes to remain untouched during their

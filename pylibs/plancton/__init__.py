@@ -42,7 +42,7 @@ def _utc_time():
 
 def robust(tries=5, delay=3, backoff=2):
     """ Decorator to catch requests.ConnectionError exceptions, fully customizable, its main aim is to
-        manage racing conditions and a, for some reason, unresponisve docker daemon.
+        manage racing conditions and a, for some reason, unresponsive docker daemon situations.
     """
     def robust_decorator(f):
         @wraps(f)
@@ -100,7 +100,6 @@ class Plancton(Daemon):
              @param pidfile     File where PID is written                                                
              @param logdir      Directory with logfiles (rotated)                                        
              @param socket      Unix socket exposed by docker                                            
-             @param url         GitHub conf repository, we are currently using GitHub API                
         """
         super(Plancton, self).__init__(name, pidfile)
         """ Start time in UTC """
