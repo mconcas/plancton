@@ -395,7 +395,7 @@ class Plancton(Daemon):
             running = len(clist)
         except Exception as e:
             self.logctl.error('<...Couldn\'t get containers list! %s...>', e)
-            return None
+            return 0
         else:
             for i in clist:
                 if 'Up' in str(i['Status']):
