@@ -59,6 +59,14 @@ def robust(tries=5, delay=3, backoff=2):
                     time.sleep(ldelay)
                     ltries -= 1
                     ldelay *= backoff
+                except re.ReadTimeout, e:
+                    msg = "[%s], Failed to reach docker, Retrying in %d seconds..." % \
+                       (f.__name__, ldelay)
+                    self.logctl.warning(msg)
+                    self.logctl.warning(e)
+                    time.sleep(ldelay)
+                    ltries -= 1
+                    ldelay *= backoff
                 except Exception, e:
                     raise
             self.logctl.error('Couldn\'t make a [%s] request to the docker daemon... exiting.' % 
@@ -358,7 +366,7 @@ class Plancton(Daemon):
             @return nothing.
         """
         self.logctl.info('--------------------------------------------------------------------')
-        self.logctl.info('| n\'|  container id  |  status    |         name          |  pid  |')
+        self.logctl.info('| n\' |  container id  |  status    |         name          |  pid  |')
         self.logctl.info('--------------------------------------------------------------------')
         try:
             clist = self.container_list(all=True)
@@ -388,6 +396,7 @@ class Plancton(Daemon):
         """ Get rid of exceeded ttl or exited or created containers.
             @return number of active containers.
         """
+        running = 0
         try:
             clist = self.container_list(all=True)
             """ safe assumption, in case of failure it won't start to spawn containers indefinitely """
@@ -507,7 +516,7 @@ class Plancton(Daemon):
         self.logctl.debug('<...CPU efficiency: %.2f%%...>' % self.efficiency)
         self.logctl.debug('<...CPU available:  %.2f%%...>' % self.idle)
         self.logctl.debug('<...Potentially fitting docks: %d...>' % int(self.idle*0.95*self._num_cpus/(self._cpus_per_dock*100)))
-        launchable_containers = _min(int(self.idle*0.95*self._num_cpus/(self._cpus_per_dock*100)), int(self._max_docks-int(running)))
+        launchable_containers = _min(int(self.idle*0.95*self._num_cpus/(self._cpus_per_dock*100)), int(self._max_docks-running)) 
         self.logctl.debug('<...Launchable docks: %d...>' % launchable_containers)
         for i in range(launchable_containers):
            self._deploy_container()
