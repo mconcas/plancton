@@ -59,4 +59,4 @@ Thus one can grant an harmonic use of resources.
 On the other hand in case the host owner reclaims *his* computing resources Plancton automatically detect it and
 more or less (customizable) quickly is able to shut down its containers to release the *cpu-shares* of the host.
 
-[Thanks to G. for providing Pl. a name]
+[Credits for the name to G.]
