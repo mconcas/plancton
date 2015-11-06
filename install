@@ -10,18 +10,19 @@ MANUAL_DOCKER_INSTALL=no
 
 function welcome() {
    echo
-   echo "<< Plancton Installer script >>"
+   echo "<< Welcome to \"Plancton, a volunteer computing project\" installation procedure >>"
    echo
 }
+
 function testcmd() {
    command -v "$@" > /dev/null 2>&1
 }
+
 function testreq() {
-   # check prereqs, test with testcmd().
    echo "Testing requisites..."
    for i in "$@"; do
       if ! testcmd "$i"; then
-         echo -e "\e[1;91m !! $i MISSING !! \e[0;0m"
+         echo -e "\e[1;91m !! $i is MISSING !! \e[0;0m"
          exit 1
       else
          echo -e "\e[1;32m !! $i FOUND !! \e[0;0m"
@@ -33,6 +34,10 @@ function main() {
    conf_branch="$1"
    if [[ "$conf_branch" == '' ]]; then
       echo -e "\e[1;91mPlease specify the configuration branch to use.\e[m"
+      echo -e "\e[1;91m Examples:\e[m"
+      echo -e "\e[1;91m\t* to-infn/dev\e[m"
+      echo -e "\e[1;91m\t* cern-openstack/dev\e[m"
+      
       exit 1
    fi
    bash_c='bash -c'
@@ -107,7 +112,7 @@ function main() {
    cd /
    [[ ! -d $Daemondir/git/.git ]] && su $Daemonuser -c "git clone https://github.com/mconcas/plancton $Daemondir/git"
 
-   echo "oningng Plancton configuration from $conf_branch ..."
+   echo "cloning Plancton configuration repository: $conf_branch ..."
    su $Daemonuser -c "mkdir -p $Daemondir/.plancton"
    [[ ! -d $Daemondir/.plancton/conf/.git ]] && su $Daemonuser -c "git clone -b $conf_branch https://github.com/mconcas/voluntary-config $Daemondir/.plancton/conf"
 
