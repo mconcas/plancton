@@ -271,7 +271,7 @@ class Plancton(Daemon):
                             cont_list[0]['Id'])
                         self.logctl.error(e)
                     else:
-                        self.logctl.debug('<...Sacrified %s successfully...>' % \
+                        self.logctl.debug('<...Removed %s successfully...>' % \
                             cont_list[0]['Id'])
                         self._overhead_tol_counter=0
                         return
@@ -449,12 +449,12 @@ class Plancton(Daemon):
                         self.logctl.debug('<...Removed => %s successfully...>' % i['Id'])
             return running
  
-    def _jump_ship(self, name='plancton-slave'):
-        """ Gracefully exiting, plancton kills all the owned containers.
-            @return True if all containers are correctly deleted, False otherwise.
+    def _clean_up(self, name='plancton-slave'):
+        """ Kill all the tagged (running too) containers.
+            @return True if all containers are successfully wiped out, False otherwise.
         """
         ret = True
-        self.logctl.warning('Every man for himself, abandon ship!')
+        self.logctl.warning('cleaning up all tagged containers, this may take a while...')
         try:
             clist = self.container_list(all=True)
         except Exception as e:
@@ -481,11 +481,12 @@ class Plancton(Daemon):
         """
         self.logctl.info('Graceful termination requested: we will exit gracefully soon...')
         self._do_main_loop = False
-        if self._jump_ship():
-            self.logctl.info('Exited gracefully, see you soon.')
-            return True
-        return False
-
+        # if self._clean_up():
+            # self.logctl.info('Exited gracefully, see you soon.')
+            # return True
+        # return False
+        return True
+        
     def init(self):
         self._setup_log_files()
         self._read_conf()
