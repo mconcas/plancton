@@ -10,7 +10,7 @@ container to be added in a condor pool.
 Plancton is based on the [docker-py](https://github.com/docker/docker-py) Python module for API requests and on
 [PyYaml](http://pyyaml.org/wiki/PyYAMLDocumentation) for configurations parsing.
 
-## Installation - User guide
+## Installation and Configuration - User guide
 
 ### To be installed, Plancton requires:
 1. **python-pip**: you can find a guide [here](http://pip.readthedocs.org/en/stable/installing/)
@@ -30,18 +30,28 @@ As `root` run:
 where `<specific-tag>` is referred to a tag of a git repository your production environment (see
    the admin guide for further information).
 
+## Installation and Configuration - Administrator guide
+###Structure of the project
+The aim of this project is to provide a batch farm in the form of a [HTCondor](https://research.cs.wisc.edu/htcondor/) 
+cluster. In particular Plancton has the precise task to continuosly spawn worker-nodes in the form of linux-containers
+([LXC](https://linuxcontainers.org/))
+to be added to the condor pool.
+This is achieved with a certain degree of flexibility that doesn't make Plancton blind to the host utilization, 
+that in general is a priority in a voluntary computing approach.
+
+
 ## Rationale
-Since Plancton thought as a part of a
+Since Plancton is conceived as a part of a 
 **[volunteer project](https://en.wikipedia.org/wiki/Volunteer_computing)**, we should consider a set of
 constraints/limitations both in project, development and production phase.  
 *   First of all we have to strongly keep in mind that even the installation could be done with administration
-privileges is good practice to run software with the lowest privileges as possible, perhaps relegating the
+privileges, is good practice to run software with the lowest privileges as possible, perhaps relegating the
 execution to a dedicated user (e.g. plancton) and the put the installation path in a easy-to-manage *optional*
 locations (e.g. `/opt/plancton`).  
 I won't fully justify here what a basic common sense can here explain in terms of security.  
 On the other side, since we are not able to grant a strong isolation/integrity of processes (this is due both to
    docker limitations but more trivially because the host owner has full access to his machine, thus even running
-   everything as `root` would not change anything) we cannot ensure processes to remain untouched during their
+   everything as `root` would not change anything) we cannot ensure processes to remain uncorrupted during their
    execution.  
 Please notice that I'm not referring to an eventual manual shutdown of containers (this kind of things are what
    condor is made to manage at integrity level and Plancton for the reliability level) but more specifically to
@@ -50,13 +60,19 @@ Now, it's not straightforward to do that without interrupting the normal process
    a non-interactive entrypoint) but I guess a truly motivated person with a lot of spare time and resources
    could achieve that.
 *   In this context we have to particularly pay attention to the resources usage. Plancton is thought to
-dynamically fit available resources spawning containers (the overhead amount and initialization time is ridiculous
-   compared to, *say*, VMs).  
+dynamically fit available resources spawning containers (the overhead amount and initialization time is dramatically
+   shorter compared to, *say*, VMs).  
    These come with a pilot executable script as entry point. This script patiently waits for a job to be assigned
    for a fixed time then shut down itself. After doing the garbage collection, Plancton can spawn other
    containers, if fitting, and so on.
 Thus one can grant an harmonic use of resources.  
 On the other hand in case the host owner reclaims *his* computing resources Plancton automatically detect it and
 more or less (customizable) quickly is able to shut down its containers to release the *cpu-shares* of the host.
+*   The choice to install the HTCondor services inside the worker-container instead directly on the host carries 
+with it some consequences. First of all one limit the prerequieistes to the docker-engine and some python modules.
+Of course all the compatibility issues caused by updates (both OSs/Condor) are managed at container build-time, which
+translates itself in a better compatibility and portability. 
+Thanks to Condor features like **sharedport** and **flocking** one can face complex network topologies *easily* keeping 
+the condor configuration almost the same along the net. 
 
 [Credits for the name to G.]
