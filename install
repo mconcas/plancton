@@ -103,15 +103,15 @@ function main() {
      exit 1
    fi
 
-   echo "getting plancton..."
+   echo "cloning Plancton into: $Daemondir/git/ ..."
    cd /
    [[ ! -d $Daemondir/git/.git ]] && su $Daemonuser -c "git clone https://github.com/mconcas/plancton $Daemondir/git"
 
-   echo "getting plancton configuration $conf_branch..."
+   echo "oningng Plancton configuration from $conf_branch ..."
    su $Daemonuser -c "mkdir -p $Daemondir/.plancton"
    [[ ! -d $Daemondir/.plancton/conf/.git ]] && su $Daemonuser -c "git clone -b $conf_branch https://github.com/mconcas/voluntary-config $Daemondir/.plancton/conf"
 
-   echo "starting plancton..."
+   echo "running Plancton start script ..."
    su $Daemonuser -c $Daemondir/git/run/plancton-start
 }
 

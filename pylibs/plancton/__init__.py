@@ -479,7 +479,7 @@ class Plancton(Daemon):
         """ Action to perform when some exit signal is received.
             @return True if success.
         """
-        self.logctl.info('Termination requested: we will exit gracefully soon...')
+        self.logctl.info('Graceful termination requested: we will exit gracefully soon...')
         self._do_main_loop = False
         if self._jump_ship():
             self.logctl.info('Exited gracefully, see you soon.')
