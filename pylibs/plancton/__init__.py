@@ -392,21 +392,35 @@ class Plancton(Daemon):
             self.logctl.info('--------------------------------------------------------------------')
         return
 
-    def _control_containers(self, name='plancton-slave', ttl_thresh_secs=12*60*60):
-        """ Get rid of exceeded ttl or exited or created containers.
-            @return number of active containers.
+
+    def _count_containers(self, name='plancton-slave'):
+        """ Count the number of tagged containers.
+            @return that number.
         """
         running = 0
         try:
-            clist = self.container_list(all=True)
-            """ safe assumption, in case of failure it won't start to spawn containers indefinitely """
-            running = len(clist)
+            clist = self.container_list(all=False)
         except Exception as e:
-            self.logctl.error('<...Couldn\'t get containers list! %s...>', e)
-            return 0
+            self.logctl.error('<...Couldn\'t get containers list, defaultin running value to zero. \n %s...>', e)
+            pass
         else:
             for i in clist:
-                if 'Up' in str(i['Status']):
+                if 'Up' in str(i['Status']) and name in str(i['Names']):
+                    running = running+1
+        return running
+
+    def _control_containers(self, name='plancton-slave', ttl_thresh_secs=12*60*60):
+        """ Get rid of exceeded ttl or exited or created containers.
+            @return nothing.
+        """
+        try:
+            clist = self.container_list(all=True)
+            """ safe assumption, in case of failure it won't start to spawn containers indefinitely """
+        except Exception as e:
+            self.logctl.error('<...Couldn\'t get containers list! %s...>', e)
+        else:
+            for i in clist:
+                if 'Up' in str(i['Status']) and name in str(i['Names']):
                     try:
                         insdata = self.container_inspect(i['Id'])
                     except Exception as e:
@@ -414,8 +428,7 @@ class Plancton(Daemon):
                     else:
                         statobj = datetime.strptime(insdata['State']['StartedAt'][:19], 
                             "%Y-%m-%dT%H:%M:%S")
-                        delta = _utc_time() - time.mktime(statobj.timetuple())
-                        if delta > ttl_thresh_secs:
+                        if (_utc_time() - time.mktime(statobj.timetuple())) > ttl_thresh_secs:
                             self.logctl.info('<...Killing %s since it exceeded the ttl_thr...>' % \
                                 i['Id'])
                             try:
@@ -426,28 +439,26 @@ class Plancton(Daemon):
                                     I opted for a more permissive approach.
                                     That is not to critically stop the daemon, but simply 
                                     wait for the next garbage collection.
-				"""
+				                """
                                 self.logctl.warning(
-                                    '<...It couldn\'t be possible to remove container with id: %s...>' % \
+                                    '<...It couldn\'t be possible to remove container with id: %s passing anyway...>' % \
                                     i['Id'])
                                 self.logctl.error(e)
                                 pass
                             else:
-                                self.logctl.debug('<...Removed => %s successfully...>' % i['Id'])
+                                self.logctl.info('<...Removed => %s ...>' % i['Id'])
                 else:
                     try:
                         self.logctl.debug("<...Removing => %s...>" % i['Id'])
                         self.container_remove(id=i['Id'], force=True)
                     except Exception as e:
                         self.logctl.warning(
-                            '<...It couldn\'t be possible to remove container with id: %s...>' % \
+                            '<...It couldn\'t be possible to remove container with id: %s passing anyway...>' % \
                             i['Id'])
                         self.logctl.error(e)
                         pass
                     else:
-                        running = running-1
-                        self.logctl.debug('<...Removed => %s successfully...>' % i['Id'])
-            return running
+                        self.logctl.info('<...Removed => %s ...>' % i['Id'])
  
     def _clean_up(self, name='plancton-slave'):
         """ Kill all the tagged (running too) containers.
@@ -513,7 +524,7 @@ class Plancton(Daemon):
         if (delta_1 >= int(self._int_st['daemon']['updateconfig'])):
             self._pull_image()
             self._last_confup_time = _utc_time()
-        running = self._control_containers()
+        running = self._count_containers()
         self.logctl.debug('<...CPU efficiency: %.2f%%...>' % self.efficiency)
         self.logctl.debug('<...CPU available:  %.2f%%...>' % self.idle)
         self.logctl.debug('<...Potentially fitting docks: %d...>' % int(self.idle*0.95*self._num_cpus/(self._cpus_per_dock*100)))
