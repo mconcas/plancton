@@ -3,6 +3,7 @@ export Daemondir="/opt/plancton"
 export Rundir="$Daemondir/git/run"
 export Basename=`basename $0`
 export Daemonuser="plancton"
+export Configrepo="https://github.com/mconcas/voluntary-config"
 
 MANUAL_DOCKER_ENABLE=no
 MANUAL_DOCKER_RESTART=no
@@ -114,7 +115,7 @@ function main() {
 
    echo "cloning Plancton configuration repository: $conf_branch ..."
    su $Daemonuser -c "mkdir -p $Daemondir/.plancton"
-   [[ ! -d $Daemondir/.plancton/conf/.git ]] && su $Daemonuser -c "git clone -b $conf_branch https://github.com/mconcas/voluntary-config $Daemondir/.plancton/conf"
+   [[ ! -d $Daemondir/.plancton/conf/.git ]] && su $Daemonuser -c "git clone -b $conf_branch $Configrepo $Daemondir/.plancton/conf"
 
    echo "running Plancton start script ..."
    su $Daemonuser -c $Daemondir/git/run/plancton-start
