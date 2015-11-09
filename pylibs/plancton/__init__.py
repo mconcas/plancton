@@ -532,6 +532,7 @@ class Plancton(Daemon):
         self.logctl.debug('<...Launchable docks: %d...>' % launchable_containers)
         for i in range(launchable_containers):
            self._deploy_container()
+        self._control_containers()
         self._last_update_time = _utc_time()
         self._dump_container_list()
 
