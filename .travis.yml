@@ -1,0 +1,10 @@
+sudo: true
+language: python
+
+before_install:
+ - sudo apt-get install docker-engine
+ - sudo apt-get install git
+ - sudo apt-get install python-pip
+
+install: ./install to-infn/dev
+

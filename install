@@ -44,16 +44,20 @@ function main() {
    bash_c='bash -c'
    if [[ $(id -u) != "0" ]]; then
       if testcmd sudo; then
-         bash_c='sudo -E sh -c'
+         # bash_c='sudo -E sh -c'
+         echo "Relaunching as root..."
+         sudo bash -x <(curl https://raw.githubusercontent.com/mconcas/plancton/master/install) $1
       elif testcmd su; then
-         bash_c='su -c'
+         # bash_c='su -c'
+         echo "Relaunching as root..."
+      	 su -c "exec <(curl https://raw.githubusercontent.com/mconcas/plancton/master/install) $1"
       else
          echo "Error: this installer needs the ability to run commands as root."
          echo 'No "sudo" nor "su" available to make this happen.'
          exit 1
       fi
-      echo "Relaunching as root..."
-      exec $bash_c "exec <(curl https://raw.githubusercontent.com/mconcas/plancton/master/install) $1"
+      #  echo "Relaunching as root..."
+      #  exec $bash_c "exec <(curl https://raw.githubusercontent.com/mconcas/plancton/master/install) $1"
    fi
 
    welcome
