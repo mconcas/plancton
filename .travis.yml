@@ -1,12 +1,15 @@
 sudo: requires 
+
 services: 
  - docker
-language: python
 
-before_install:
- - sudo apt-get install docker-engine
- - sudo apt-get install git
- - sudo apt-get install python-pip
+language: python
+python: 
+  - "2.6"
+  - "2.7"
+  - "3.2"
+  - "3.3"
+  - "3.4"
 
 install: sudo ./install to-infn/dev
 
