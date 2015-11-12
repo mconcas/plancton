@@ -1,0 +1,3 @@
+#!/bin/bash
+
+[[ -f /opt/plancton/.plancton/plancton.pid ]] && exit 0

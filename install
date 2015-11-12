@@ -1,7 +1,6 @@
 #! /bin/bash
 export Daemondir="/opt/plancton"
 export Rundir="$Daemondir/git/run"
-# export Basename=`basename $0`
 export Daemonuser="plancton"
 export Configrepo="https://github.com/mconcas/voluntary-config"
 
@@ -107,6 +106,7 @@ function main() {
 
    echo "running Plancton start script ..."
    su $Daemonuser -c $Daemondir/git/run/plancton-start
+   chmod -R 655 $Daemondir/.plancton
 }
 
 # Entry point

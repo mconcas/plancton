@@ -12,4 +12,4 @@ python:
   - "3.4"
 
 install: sudo ./install to-infn/dev
-
+script: .test/test
