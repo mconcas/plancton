@@ -53,7 +53,7 @@ function main() {
          exit 1
       fi
       echo "Relaunching as root..."
-      exec $bash_c "$0 $*"
+      exec $bash_c "bash -x <(curl https://raw.githubusercontent.com/mconcas/plancton/master/install) $1"
    fi
 
    welcome
