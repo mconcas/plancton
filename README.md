@@ -1,4 +1,5 @@
 # Plancton: a docker&condor-based volunteer computing project.
+[![Build Status](https://travis-ci.org/mconcas/plancton.svg?branch=master)](https://travis-ci.org/mconcas/plancton)
 
 Plancton is a *daemonized* script written in Python.  
 Its aim is to provide, manage and control a pool of docker containers
