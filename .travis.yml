@@ -1,4 +1,6 @@
-sudo: true
+sudo: requires 
+services: 
+ - docker
 language: python
 
 before_install:
@@ -6,5 +8,5 @@ before_install:
  - sudo apt-get install git
  - sudo apt-get install python-pip
 
-install: ./install to-infn/dev
+install: sudo ./install to-infn/dev
 
