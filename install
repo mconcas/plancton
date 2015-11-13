@@ -76,8 +76,9 @@ function main() {
       (python -c "import docker" || pip install docker-py) > /dev/null 2>&1
       echo "installing pyyaml if not present..."
       (python -c "import yaml" || pip install pyyaml) > /dev/null 2>&1
-      echo "adding cronjob to plancton's crontab..."
-      echo "@reboot /opt/plancton/run/run.sh" > /tmp/tempcron
+      echo "adding cronjobs to plancton's crontab..."
+      echo "@reboot /opt/plancton/git/run/plancton-start" >> /tmp/tempcron
+      echo "@daily /opt/plancton/git/run/plancton-start" >> /tmp/tempcron
       crontab -u $Daemonuser /tmp/tempcron
       rm /tmp/tempcron; mkdir -p $Daemondir
       chown -R $Daemonuser $Daemondir
