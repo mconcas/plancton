@@ -14,4 +14,7 @@ if [[ $? == 0 ]]; then
 fi
 export PATH=$PATH:$DEST/bin
 export PYTHONPATH=$PYTHONPATH:$DEST/pylibs
+set +e
+planctonctl stop 
+set -e
 planctonctl start
