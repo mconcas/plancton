@@ -59,7 +59,7 @@ def robust(tries=5, delay=3, backoff=2):
                     time.sleep(ldelay)
                     ltries -= 1
                     ldelay *= backoff
-                except re.ReadTimeout, e:
+                except re.ReadTimeout, APIError, e:
                     msg = "[%s], Failed to reach docker, Retrying in %d seconds..." % \
                        (f.__name__, ldelay)
                     self.logctl.warning(msg)
