@@ -14,6 +14,7 @@ import time
 from datetime import datetime
 from daemon import Daemon
 from docker import Client
+import docker.errors as de
 import requests.exceptions as re
 import yaml
 
@@ -67,8 +68,8 @@ def robust(tries=5, delay=3, backoff=2):
                     time.sleep(ldelay)
                     ltries -= 1
                     ldelay *= backoff
-                except re.ReadTimeout, APIError, e:
-                    msg = "[%s], Failed to reach succesfully evade API request, Retrying in %d seconds..." % \
+                except de.APIError, e:
+                    msg = "[%s], Failed to succesfully evade API request, Retrying in %d seconds..." % \
                        (f.__name__, ldelay)
                     self.logctl.warning(msg)
                     self.logctl.warning(e)
