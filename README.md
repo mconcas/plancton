@@ -1,3 +1,8 @@
+
+```bash
+~#> bash -x <(curl https://raw.githubusercontent.com/mconcas/plancton/master/install) <specific-tag>  
+```
+
 # Plancton: a docker&condor-based volunteer computing project.
 [![Build Status](https://travis-ci.org/mconcas/plancton.svg?branch=master)](https://travis-ci.org/mconcas/plancton)
 
