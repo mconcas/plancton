@@ -106,7 +106,6 @@ function main() {
 
    echo "running Plancton start script ..."
    su $Daemonuser -c $Daemondir/git/run/plancton-start
-   chmod -R 655 $Daemondir/.plancton
 }
 
 # Entry point
