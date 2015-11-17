@@ -429,45 +429,48 @@ class Plancton(Daemon):
             self.logctl.error('<...Couldn\'t get containers list! %s...>', e)
         else:
             for i in clist:
-                if 'Up' in str(i['Status']) and name in str(i['Names']):
-                    try:
-                        insdata = self.container_inspect(i['Id'])
-                    except Exception as e:
-                        self.logctl.error('<...Couldn\'t get container informations! %s...>', e)
-                    else:
-                        statobj = datetime.strptime(insdata['State']['StartedAt'][:19], 
-                            "%Y-%m-%dT%H:%M:%S")
-                        if (_utc_time() - time.mktime(statobj.timetuple())) > ttl_thresh_secs:
-                            self.logctl.info('<...Killing %s since it exceeded the ttl_thr...>' % \
-                                i['Id'])
-                            try:
-                                self.container_remove(id=i['Id'], force=True)
-                            except Exception as e:
-                                """ It may happen that this command goes in racing condition with 
-                                    manual container deletion, since this is not a big deal, 
-                                    I opted for a more permissive approach.
-                                    That is not to critically stop the daemon, but simply 
-                                    wait for the next garbage collection.
-				                """
-                                self.logctl.warning(
-                                    '<...It couldn\'t be possible to remove container with id: %s passing anyway...>' % \
-                                    i['Id'])
-                                self.logctl.error(e)
-                                pass
-                            else:
-                                self.logctl.info('<...Removed => %s ...>' % i['Id'])
-                else:
-                    try:
-                        self.logctl.debug("<...Removing => %s...>" % i['Id'])
-                        self.container_remove(id=i['Id'], force=True)
-                    except Exception as e:
-                        self.logctl.warning(
-                            '<...It couldn\'t be possible to remove container with id: %s passing anyway...>' % \
-                            i['Id'])
-                        self.logctl.error(e)
-                        pass
-                    else:
-                        self.logctl.info('<...Removed => %s ...>' % i['Id'])
+            	if name in str(i['Names']):
+            		## TTL threshold block
+	                if 'Up' in str(i['Status']):
+	                    try:
+	                        insdata = self.container_inspect(i['Id'])
+	                    except Exception as e:
+	                        self.logctl.error('<...Couldn\'t get container informations! %s...>', e)
+	                    else:
+	                        statobj = datetime.strptime(insdata['State']['StartedAt'][:19], 
+	                            "%Y-%m-%dT%H:%M:%S")
+	                        if (_utc_time() - time.mktime(statobj.timetuple())) > ttl_thresh_secs:
+	                            self.logctl.info('<...Killing %s since it exceeded the ttl_thr...>' % \
+	                                i['Id'])
+	                            try:
+	                                self.container_remove(id=i['Id'], force=True)
+	                            except Exception as e:
+	                                """ It may happen that this command goes in racing condition with 
+	                                    manual container deletion, since this is not a big deal, 
+	                                    I opted for a more permissive approach.
+	                                    That is not to critically stop the daemon, but simply 
+	                                    wait for the next garbage collection.
+					                """
+	                                self.logctl.warning(
+	                                    '<...It couldn\'t be possible to remove container with id: %s passing anyway...>' % \
+	                                    i['Id'])
+	                                self.logctl.error(e)
+	                                pass
+	                            else:
+	                                self.logctl.info('<...Removed => %s ...>' % i['Id'])
+	                ## Cleanup Exited block
+	                else:
+	                    try:
+	                        self.logctl.debug("<...Removing => %s...>" % i['Id'])
+	                        self.container_remove(id=i['Id'], force=True)
+	                    except Exception as e:
+	                        self.logctl.warning(
+	                            '<...It couldn\'t be possible to remove container with id: %s passing anyway...>' % \
+	                            i['Id'])
+	                        self.logctl.error(e)
+	                        pass
+	                    else:
+	                        self.logctl.info('<...Removed => %s ...>' % i['Id'])
  
     def _clean_up(self, name='plancton-slave'):
         """ Kill all the tagged (running too) containers.
