@@ -6,4 +6,4 @@ services:
 language: python
 
 install: sudo ./install to-infn/dev
-script: ./test/test
+script: sudo ./test/test
