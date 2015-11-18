@@ -102,7 +102,7 @@ function main() {
    echo "cloning Plancton configuration repository: $conf_branch ..."
    su $Daemonuser -c "mkdir -p $Daemondir/.plancton"
    [[ ! -d $Daemondir/.plancton/conf/.git ]] && su $Daemonuser -c "git clone -b $conf_branch $Configrepo $Daemondir/.plancton/conf"
-   echo "Parsing apparmor profile"
+   echo "Parsing apparmor profile..."
    set +e
    apparmor_parser -r $Daemondir/.plancton/conf/docker-allow-ptrace
    set -e
