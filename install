@@ -77,8 +77,8 @@ function main() {
       echo "installing pyyaml if not present..."
       (python -c "import yaml" || pip install pyyaml) > /dev/null 2>&1
       echo "adding cronjobs to plancton's crontab..."
-      echo "@reboot /opt/plancton/git/run/plancton-start" >> /tmp/tempcron
-      echo "@daily /opt/plancton/git/run/plancton-start" >> /tmp/tempcron
+      echo "@reboot /opt/plancton/git/run/plancton-start > /tmp/cron-plancton.log" >> /tmp/tempcron
+      echo "@daily /opt/plancton/git/run/plancton-start > /tmp/cron-plancton.log" >> /tmp/tempcron
       crontab -u $Daemonuser /tmp/tempcron
       rm /tmp/tempcron; mkdir -p $Daemondir
       chown -R $Daemonuser $Daemondir
