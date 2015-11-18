@@ -67,10 +67,6 @@ function main() {
       update-rc.d docker defaults > /dev/null 2>&1 ||                      # Ubuntu &  Debian
       rc-update add docker default > /dev/null 2>&1 ||                     # Gentoo (lol)
       ( echo "couldn't, please enable it manually..." && MANUAL_DOCKER_ENABLE=yes )
-      echo "configuring apparmor..."
-      set +e
-      apparmor_parser -r $Daemondir/.plancton/conf/docker-allow-ptrace
-      set -e
       echo "adding group docker..."
       (getent group docker || groupadd docker) > /dev/null 2>&1
       echo "adding $Daemonuser..."
@@ -106,6 +102,10 @@ function main() {
    echo "cloning Plancton configuration repository: $conf_branch ..."
    su $Daemonuser -c "mkdir -p $Daemondir/.plancton"
    [[ ! -d $Daemondir/.plancton/conf/.git ]] && su $Daemonuser -c "git clone -b $conf_branch $Configrepo $Daemondir/.plancton/conf"
+   echo "Parsing apparmor profile"
+   set +e
+   apparmor_parser -r $Daemondir/.plancton/conf/docker-allow-ptrace
+   set -e
 
    echo "running Plancton start script ..."
    su $Daemonuser -c $Daemondir/git/run/plancton-start
