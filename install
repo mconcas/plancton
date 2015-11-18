@@ -67,7 +67,10 @@ function main() {
       update-rc.d docker defaults > /dev/null 2>&1 ||                      # Ubuntu &  Debian
       rc-update add docker default > /dev/null 2>&1 ||                     # Gentoo (lol)
       ( echo "couldn't, please enable it manually..." && MANUAL_DOCKER_ENABLE=yes )
-
+      echo "configuring apparmor..."
+      set +e
+      apparmor_parser -r $Daemondir/.plancton/conf/docker-allow-ptrace
+      set -e
       echo "adding group docker..."
       (getent group docker || groupadd docker) > /dev/null 2>&1
       echo "adding $Daemonuser..."

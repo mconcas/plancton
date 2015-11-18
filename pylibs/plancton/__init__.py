@@ -239,7 +239,8 @@ class Plancton(Daemon):
                                           'Image': self._pilot_dock,
                                           'HostConfig': { 'CpuShares': int(self._cpu_shares),
                                                           'NetworkMode':'bridge',
-                                                          'Binds': self._condor_conf_list
+                                                          'Binds': self._condor_conf_list,
+                                                          'SecurityOpt':['apparmor:docker-ptraceable']
                                                         }
                                         }
         self.logctl.debug(self._int_st)
