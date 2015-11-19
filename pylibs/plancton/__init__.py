@@ -371,7 +371,7 @@ class Plancton(Daemon):
         self._start_container(self._create_container_by_name(cname_prefix=cname))
         return
 
-    def _dump_container_list(self):
+    def _dump_container_list(self, cname='plancton-slave'):
         """ Log some informations about running containers.
             @return nothing.
         """
@@ -384,22 +384,23 @@ class Plancton(Daemon):
             self.logctl.error('<...Couldn\'t get container list! %s...>', e)
         else:
             for i in range(0,len(clist)):
-                num = i+1
-                shortid = str(clist[i]['Id'])[:12]
-                status = ''
-                if 'Up' in str(clist[i]['Status']):
-                    status = ' active '
-                else:
-                    status = 'inactive'
-                name = str(clist[i]['Names'][0].replace('/',''))
-                pid = self.container_inspect(id=str(clist[i]['Id']))['State'].get('Pid', ' --- ')
-                if pid is 0:
-                    pid = ' --- '
-                else:
-                    pid = str(pid)
-                self.logctl.info( '| %s  |  %s  |  %s  | %s | %s |' \
-                    % (num, shortid, status, name, pid))
-            self.logctl.info('--------------------------------------------------------------------')
+            	if cname in str(clist[i]['Names'][0].replace('/','')):
+                    num = i+1
+                    shortid = str(clist[i]['Id'])[:12]
+                    status = ''
+                    if 'Up' in str(clist[i]['Status']):
+                        status = ' active '
+                    else:
+                        status = 'inactive'
+                    name = str(clist[i]['Names'][0].replace('/',''))
+                    pid = self.container_inspect(id=str(clist[i]['Id']))['State'].get('Pid', ' --- ')
+                    if pid is 0:
+                        pid = ' --- '
+                    else:
+                        pid = str(pid)
+                    self.logctl.info( '| %s  |  %s  |  %s  | %s | %s |' \
+                        % (num, shortid, status, name, pid))
+                self.logctl.info('--------------------------------------------------------------------')
         return
 
 
