@@ -240,7 +240,7 @@ class Plancton(Daemon):
                                           'HostConfig': { 'CpuShares': int(self._cpu_shares),
                                                           'NetworkMode':'bridge',
                                                           'Binds': self._condor_conf_list,
-                                                          'SecurityOpt':['apparmor:docker-ptraceable']
+                                                          'SecurityOpt':['apparmor:docker-allow-ptrace']
                                                         }
                                         }
         self.logctl.debug(self._int_st)
@@ -400,7 +400,7 @@ class Plancton(Daemon):
                         pid = str(pid)
                     self.logctl.info( '| %s  |  %s  |  %s  | %s | %s |' \
                         % (num, shortid, status, name, pid))
-                self.logctl.info('--------------------------------------------------------------------')
+            self.logctl.info('--------------------------------------------------------------------')
         return
 
 
@@ -506,10 +506,7 @@ class Plancton(Daemon):
         """
         self.logctl.info('Graceful termination requested: we will exit gracefully soon...')
         self._do_main_loop = False
-        # if self._clean_up():
-            # self.logctl.info('Exited gracefully, see you soon.')
-            # return True
-        # return False
+        
         return True
         
     def init(self):
