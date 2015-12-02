@@ -3,7 +3,7 @@
 ~#> bash -x <(curl https://raw.githubusercontent.com/mconcas/plancton/master/install) <specific-tag>  
 ```
 
-# Plancton: a docker-based voluntary computing project.
+# Plancton: a docker-based volunteer computing project.
 [![Build Status](https://travis-ci.org/mconcas/plancton.svg?branch=master)](https://travis-ci.org/mconcas/plancton)
 
 Plancton is a *daemonized* script written in Python.  
