@@ -69,7 +69,7 @@ def robust(tries=5, delay=3, backoff=2):
                     ltries -= 1
                     ldelay *= backoff
                 except de.APIError, e:
-                    msg = "[%s], Failed to succesfully evade API request, Retrying in %d seconds..." % \
+                    msg = "[%s], Failed to successfully evade API request, Retrying in %d seconds..." % \
                        (f.__name__, ldelay)
                     self.logctl.warning(msg)
                     self.logctl.warning(e)
