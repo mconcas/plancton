@@ -1,3 +1,4 @@
 #!/bin/bash
 
-[[ -f /opt/plancton/.plancton/plancton.pid ]] && exit 0
+[[ -f /opt/plancton/.plancton/plancton.pid ]] && ./opt/plancton/git/uninstall
+
