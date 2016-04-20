@@ -10,7 +10,7 @@ MANUAL_DOCKER_INSTALL=no
 
 function welcome() {
    echo
-   echo "<< Welcome to \"Plancton, a volunteer computing project\" installation procedure >>"
+   echo "<< Welcome to \"Plancton, an opportunistic computing project\" installation procedure >>"
    echo
 }
 
@@ -54,6 +54,7 @@ function main() {
       fi
    fi
    echo "restarting docker daemon..."
+   service docker stop > /dev/null 2>&1
    if ! service docker start; then
       echo "couldn't, please start/restart it manually..."
       MANUAL_DOCKER_START=yes
@@ -106,7 +107,12 @@ function main() {
    set +e
    apparmor_parser -r $Daemondir/.plancton/conf/docker-allow-ptrace
    set -e
-
+   echo "Applying eventual further docker configurations..."
+   set +e
+   [[ -f $Daemondir/.plancton/conf/docker-config.sh ]] && source docker-config.sh
+   set -e
+   echo "done."
+   
    echo "running Plancton start script ..."
    su $Daemonuser -c $Daemondir/git/run/plancton-start
 }
