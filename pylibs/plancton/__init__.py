@@ -18,6 +18,12 @@ import docker.errors as de
 import requests.exceptions as re
 import yaml
 
+def apparmor_enabled():
+    if os.path.isfile('/sys/module/apparmor/parameters/enabled'):
+       with open('/sys/module/apparmor/parameters/enabled', 'r') as f:
+          return True if "Y" in f.read() else False
+    else: return False
+      
 def _min(val1, val2):
    return val1 if (val1<val2) else val2
 
@@ -234,15 +240,24 @@ class Plancton(Daemon):
            """ This should not occur """
            self.logctl.warning("Setting rigidity to default: soft.")
            self._int_st['daemon']['rigidity'] = 10
-
-        self._int_st['configuration'] = { 'Cmd': [ self._pilot_entrypoint ],
-                                          'Image': self._pilot_dock,
-                                          'HostConfig': { 'CpuShares': int(self._cpu_shares),
-                                                          'NetworkMode':'bridge',
-                                                          'Binds': self._condor_conf_list,
-                                                          'SecurityOpt':['apparmor:docker-allow-ptrace']
-                                                        }
-                                        }
+        if _apparmor_enabled():
+           self._int_st['configuration'] = { 'Cmd': [ self._pilot_entrypoint ],
+                                             'Image': self._pilot_dock,
+                                             'HostConfig': { 'CpuShares': int(self._cpu_shares),
+                                                             'NetworkMode':'bridge',
+                                                             'Binds': self._condor_conf_list,
+                                                             'SecurityOpt':['apparmor:docker-allow-ptrace']
+                                                           }
+                                           }
+        else:
+           self._int_st['configuration'] = { 'Cmd': [ self._pilot_entrypoint ],
+                                             'Image': self._pilot_dock,
+                                             'HostConfig': { 'CpuShares': int(self._cpu_shares),
+                                                             'NetworkMode':'bridge',
+                                                             'Binds': self._condor_conf_list,
+                                                           }
+                                           }
+           
         self.logctl.debug(self._int_st)
 
     def _set_cpu_efficiency(self):
