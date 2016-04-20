@@ -110,7 +110,7 @@ function main() {
    (
    echo "Applying eventual further docker configurations..."
    set +e
-   [[ -f $Daemondir/.plancton/conf/docker-config.sh ]] && source docker-config.sh
+   [[ -f $Daemondir/.plancton/conf/docker-config.sh ]] && source $Daemondir/.plancton/conf/docker-config.sh
    set -e
    echo "done."
    )
