@@ -18,7 +18,7 @@ import docker.errors as de
 import requests.exceptions as re
 import yaml
 
-def apparmor_enabled():
+def _apparmor_enabled():
     if os.path.isfile('/sys/module/apparmor/parameters/enabled'):
        with open('/sys/module/apparmor/parameters/enabled', 'r') as f:
           return True if "Y" in f.read() else False
