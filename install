@@ -107,12 +107,13 @@ function main() {
    set +e
    apparmor_parser -r $Daemondir/.plancton/conf/docker-allow-ptrace
    set -e
+   (
    echo "Applying eventual further docker configurations..."
    set +e
    [[ -f $Daemondir/.plancton/conf/docker-config.sh ]] && source docker-config.sh
    set -e
    echo "done."
-   
+   )
    echo "running Plancton start script ..."
    su $Daemonuser -c $Daemondir/git/run/plancton-start
 }
