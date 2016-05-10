@@ -10,6 +10,7 @@ import pprint
 import random
 import requests
 import string
+import socket
 import time
 from datetime import datetime
 from daemon import Daemon
@@ -117,12 +118,12 @@ class Plancton(Daemon):
     def idle(self):
        return float(100 - self.efficiency)
                                                                                                     
-    def __init__(self, name, pidfile, logdir, confdir, socket='unix://var/run/docker.sock'):
+    def __init__(self, name, pidfile, logdir, confdir, socket_location='unix://var/run/docker.sock'):
         """ Constructor                                                                                                                                                                      
-             @param name        Daemon name                                                              
-             @param pidfile     File where PID is written                                                
-             @param logdir      Directory with logfiles (rotated)                                        
-             @param socket      Unix socket exposed by docker                                            
+             @param name                 Name of the Daemon                                                              
+             @param pidfile              File where PID is written                                                
+             @param logdir               Directory with logfiles (rotated)                                        
+             @param socket_location      Unix socket exposed by docker                                            
         """
         super(Plancton, self).__init__(name, pidfile)
         """ Start time in UTC """
@@ -131,9 +132,11 @@ class Plancton(Daemon):
         self.uptime0,self.idletime0 = _cpu_times()
         self._logdir = logdir
         self._confdir = confdir
-        self.sockpath = socket
+        self.sockpath = socket_location
         """ CPU numbers """
         self._num_cpus = _cpu_count()
+        """ Hostname """
+        self._hostname = socket.gethostname().split('.')[0] 
         """ Requests session """
         self._https_session = requests.Session()
         """ JSON container settings """
@@ -240,23 +243,16 @@ class Plancton(Daemon):
            """ This should not occur """
            self.logctl.warning("Setting rigidity to default: soft.")
            self._int_st['daemon']['rigidity'] = 10
+        
+        self._int_st['configuration'] = {'Cmd': [ self._pilot_entrypoint ],
+                                         'Image': self._pilot_dock,
+                                         'HostConfig': { 'CpuShares': int(self._cpu_shares),
+                                                         'NetworkMode':'bridge',
+                                                         'Binds': self._condor_conf_list,
+                                                       }
+                                        }
         if _apparmor_enabled():
-           self._int_st['configuration'] = { 'Cmd': [ self._pilot_entrypoint ],
-                                             'Image': self._pilot_dock,
-                                             'HostConfig': { 'CpuShares': int(self._cpu_shares),
-                                                             'NetworkMode':'bridge',
-                                                             'Binds': self._condor_conf_list,
-                                                             'SecurityOpt':['apparmor:docker-allow-ptrace']
-                                                           }
-                                           }
-        else:
-           self._int_st['configuration'] = { 'Cmd': [ self._pilot_entrypoint ],
-                                             'Image': self._pilot_dock,
-                                             'HostConfig': { 'CpuShares': int(self._cpu_shares),
-                                                             'NetworkMode':'bridge',
-                                                             'Binds': self._condor_conf_list,
-                                                           }
-                                           }
+           self._int_st['configuration']['HostConfig']['SecurityOpt'] = ['apparmor:docker-allow-ptrace']
            
         self.logctl.debug(self._int_st)
 
@@ -334,12 +330,14 @@ class Plancton(Daemon):
             return False
 
     def _create_container_by_name(self, cname_prefix=''):
-        """ Create a container from a given image. Created containers need to be must be started.
+        """ Create a container from a given image. Created containers must be started.
             @return the container id if the request sucess, None if an exception is raised.
         """
-        cname = cname_prefix \
-            + '-' + ''.join(random.SystemRandom().choice( string.ascii_uppercase \
+        container_unique_hash = ''.join(random.SystemRandom().choice( string.ascii_uppercase \
             + string.digits + string.ascii_lowercase) for _ in range(6))
+        cname = cname_prefix + '-' + container_unique_hash
+        self._int_st['configuration']['Hostname'] = 'plancton' + '-' + self._hostname + '-' + container_unique_hash
+        self.logctl.debug(self._int_st['configuration'])
         self.logctl.debug('<...Creating container => %s...> ' % cname)
         try:
             tmpcont = self.container_create_from_conf(jsonconf=json.loads(json.dumps( 
