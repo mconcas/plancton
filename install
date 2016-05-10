@@ -76,6 +76,8 @@ function main() {
       (python -c "import docker" || pip install docker-py) > /dev/null 2>&1
       echo "installing pyyaml if not present..."
       (python -c "import yaml" || pip install pyyaml) > /dev/null 2>&1
+      echo "installing prettytable if not present..."
+      (python -c "import prettytable" || pip install prettytable) > /dev/null 2>&1
       echo "adding cronjobs to plancton's crontab..."
       echo "@reboot /opt/plancton/git/run/plancton-start > /tmp/cron-plancton.log" >> /tmp/tempcron
       echo "@daily /opt/plancton/git/run/plancton-start > /tmp/cron-plancton.log" >> /tmp/tempcron
