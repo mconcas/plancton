@@ -7,6 +7,7 @@ import json
 import logging, logging.handlers
 import os
 import pprint
+from prettytable import PrettyTable
 import random
 import requests
 import string
@@ -388,9 +389,8 @@ class Plancton(Daemon):
         """ Log some informations about running containers.
             @return nothing.
         """
-        self.logctl.info('--------------------------------------------------------------------')
-        self.logctl.info('| n\' |  container id  |  status    |         name          |  pid  |')
-        self.logctl.info('--------------------------------------------------------------------')
+        status_table = PrettyTable(['n\'', 'docker hash', 'status', 'docker name', 'pid'])
+
         try:
             clist = self.container_list(all=True)
         except Exception as e:
@@ -411,9 +411,9 @@ class Plancton(Daemon):
                         pid = ' --- '
                     else:
                         pid = str(pid)
-                    self.logctl.info( '| %s  |  %s  |  %s  | %s | %s |' \
-                        % (num, shortid, status, name, pid))
-            self.logctl.info('--------------------------------------------------------------------')
+                    status_table.add_row([num, shortid, status, name, pid ])
+
+        self.logctl.info('\n' + str(status_table)
         return
 
 
@@ -452,11 +452,9 @@ class Plancton(Daemon):
 	                    except Exception as e:
 	                        self.logctl.error('<...Couldn\'t get container informations! %s...>', e)
 	                    else:
-	                        statobj = datetime.strptime(insdata['State']['StartedAt'][:19], 
-	                            "%Y-%m-%dT%H:%M:%S")
+	                        statobj = datetime.strptime(insdata['State']['StartedAt'][:19], "%Y-%m-%dT%H:%M:%S")
 	                        if (_utc_time() - time.mktime(statobj.timetuple())) > ttl_thresh_secs:
-	                            self.logctl.info('<...Killing %s since it exceeded the ttl_thr...>' % \
-	                                i['Id'])
+	                            self.logctl.info('<...Killing %s since it exceeded the ttl_thr...>' % i['Id'])
 	                            try:
 	                                self.container_remove(id=i['Id'], force=True)
 	                            except Exception as e:
@@ -466,9 +464,7 @@ class Plancton(Daemon):
 	                                    That is not to critically stop the daemon, but simply 
 	                                    wait for the next garbage collection.
 					                """
-	                                self.logctl.warning(
-	                                    '<...It couldn\'t be possible to remove container with id: %s passing anyway...>' % \
-	                                    i['Id'])
+	                                self.logctl.warning('<...It couldn\'t be possible to remove container with id: %s passing anyway...>' % i['Id'])
 	                                self.logctl.error(e)
 	                                pass
 	                            else:
@@ -479,9 +475,7 @@ class Plancton(Daemon):
 	                        self.logctl.debug("<...Removing => %s...>" % i['Id'])
 	                        self.container_remove(id=i['Id'], force=True)
 	                    except Exception as e:
-	                        self.logctl.warning(
-	                            '<...It couldn\'t be possible to remove container with id: %s passing anyway...>' % \
-	                            i['Id'])
+	                        self.logctl.warning('<...It couldn\'t be possible to remove container with id: %s passing anyway...>' % i['Id'])
 	                        self.logctl.error(e)
 	                        pass
 	                    else:
@@ -505,8 +499,7 @@ class Plancton(Daemon):
                     try:
                         self.container_remove(id=str(i['Id']), force=True)
                     except Exception as e:
-                        self.logctl.error('<...Couldn\'t remove container: %s...>' %   \
-                            str(i['Id']))
+                        self.logctl.error('<...Couldn\'t remove container: %s...>' % str(i['Id']))
                         self.logctl.error(e)
                         ret = False
                     else:
@@ -517,7 +510,7 @@ class Plancton(Daemon):
         """ Action to perform when some exit signal is received.
             @return True if success.
         """
-        self.logctl.info('Graceful termination requested: we will exit gracefully soon...')
+        self.logctl.info('Graceful termination requested: will exit gracefully soon...')
         self._do_main_loop = False
         
         return True
