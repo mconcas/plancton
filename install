@@ -100,7 +100,11 @@ function main() {
 
    echo "cloning Plancton into: $Daemondir/git/ ..."
    cd /
-   [[ ! -d $Daemondir/git/.git ]] && su $Daemonuser -c "git clone https://github.com/mconcas/plancton $Daemondir/git"
+   if [[ ! -d $Daemondir/git/.git ]]; then
+     [[ -d "$TRAVIS_BUILD_DIR/plancton/.git" ]] \
+       && { rsync -av --delete $TRAVIS_BUILD_DIR/plancton/ $Daemondir/git && chown -R $Daemonuser $Daemondir/git; } \
+       || su $Daemonuser -c "git clone https://github.com/mconcas/plancton $Daemondir/git"
+   fi
 
    echo "cloning Plancton configuration repository: $conf_branch ..."
    su $Daemonuser -c "mkdir -p $Daemondir/.plancton"
