@@ -413,7 +413,7 @@ class Plancton(Daemon):
                         pid = str(pid)
                     status_table.add_row([num, shortid, status, name, pid ])
 
-        self.logctl.info('\n' + str(status_table)
+        self.logctl.info('\n' + str(status_table))
         return
 
 
