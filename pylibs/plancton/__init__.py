@@ -142,7 +142,7 @@ class Plancton(Daemon):
         """ JSON container settings """
         self._cont_config = None
         """ docker client """
-        self.docker_client = Client(base_url=self.sockpath)
+        self.docker_client = Client(base_url=self.sockpath, version='auto')
         """ Internal status dictionary """
         self._int_st = {
             'system'     : {},
