@@ -213,13 +213,14 @@ class Plancton(Daemon):
         ncpus = _cpu_count()
         self._max_docks = int(eval(str(conf.get("max_docks", "ncpus - 2"))))
         self._cpu_shares = self._cpus_per_dock*1024/ncpus
+        privileged_ops = conf.get("pilot_privileged", False)
         condor_conf_dict = conf.get("dock_condor_conf", {})
         job_wrapper_path = conf.get("parrot_wrapper_path", {})
         self._container_bind_list = [ 
             condor_conf_dict['condor_common_conf'] + ':/etc/condor/config.d/10-common.config',
             condor_conf_dict['condor_worknode_conf'] + ':/etc/condor/config.d/00-worker.config',
             condor_conf_dict['condor_base_conf'] + ':/etc/condor/condor_config',
-            job_wrapper_path['parrot_wrapper_path' + ':/etc/condor/parrot_job_wrapper.sh'] ]
+            job_wrapper_path + ':/etc/condor/parrot_job_wrapper.sh' ]
 
         self._int_st['daemon']['maxcontainers'] = self._max_docks
         self._int_st['daemon']['cputhresh'] = conf.get("cputhresh", "75")
@@ -251,7 +252,8 @@ class Plancton(Daemon):
                                          'Image': self._pilot_dock,
                                          'HostConfig': { 'CpuShares': int(self._cpu_shares),
                                                          'NetworkMode':'bridge',
-                                                         'Binds': self._container_bind_list,
+                                                         'Privileged': privileged_ops,
+                                                         'Binds': self._container_bind_list
                                                        }
                                         }
         if _apparmor_enabled():
