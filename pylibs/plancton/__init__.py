@@ -253,7 +253,7 @@ class Plancton(Daemon):
                                          'HostConfig': { 'CpuShares': int(self._cpu_shares),
                                                          'NetworkMode':'bridge',
                                                          'Privileged': privileged_ops,
-                                                         'Binds': self._condor_conf_list
+                                                         'Binds': self._container_bind_list
                                                        }
                                         }
         if _apparmor_enabled():
