@@ -220,7 +220,7 @@ class Plancton(Daemon):
             condor_conf_dict['condor_common_conf'] + ':/etc/condor/config.d/10-common.config',
             condor_conf_dict['condor_worknode_conf'] + ':/etc/condor/config.d/00-worker.config',
             condor_conf_dict['condor_base_conf'] + ':/etc/condor/condor_config',
-            job_wrapper_path['parrot_wrapper_path' + ':/etc/condor/parrot_job_wrapper.sh'] ]
+            job_wrapper_path + ':/etc/condor/parrot_job_wrapper.sh' ]
 
         self._int_st['daemon']['maxcontainers'] = self._max_docks
         self._int_st['daemon']['cputhresh'] = conf.get("cputhresh", "75")
