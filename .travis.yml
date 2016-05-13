@@ -17,5 +17,6 @@ script: |
     sudo cat $PREFIX/log/plancton.log
     exit 1
   }
-  [[ -f $PREFIX/plancton.pid ]] || dielog
+  ls -lR $PREFIX || true
+  sudo test -f $PREFIX/plancton.pid || dielog
   sudo kill -0 $(sudo cat $PREFIX/plancton.pid) || dielog
