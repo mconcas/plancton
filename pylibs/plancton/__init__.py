@@ -150,7 +150,7 @@ class Plancton(Daemon):
             'daemon'     : {
                 'version'        : self.__version__,
                 'updateinterval' : 65,
-                'updateconfig'   : 3600,
+                'updateconfig'   : 60,
                 'rigidity'       : 10,
                 'morbidity'      : 30
             },
