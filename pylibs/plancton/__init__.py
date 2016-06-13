@@ -26,16 +26,13 @@ def apparmor_enabled():
   except IOError:
     return False
 
-def _pid_exists(pid):
-    try:
-        os.kill(pid,0)
-    except OSError as e:
-        if e.errno == errno.ESRCH:
-            return False
-        elif e.errno == errno.EPERM:
-            return True
-    else:
-        return True
+def pid_exists(pid):
+  try:
+    os.kill(pid, 0)
+  except OSError as e:
+    if e.errno != errno.EPERM:
+      return False
+  return True
 
 def _cpu_count():
     return int(os.sysconf("SC_NPROCESSORS_ONLN"))
@@ -370,7 +367,7 @@ class Plancton(Daemon):
             except Exception as e:
                 self.logctl.error(e)
             else:
-                if _pid_exists(jj['State']['Pid']):
+                if pid_exists(jj['State']['Pid']):
                     self.logctl.info('<...Spawned => %s => PID: %s...>' % (str(container['Id'])[:12], \
                         jj['State']['Pid']))
                     return jj['State']['Pid']
