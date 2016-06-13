@@ -26,9 +26,6 @@ def apparmor_enabled():
   except IOError:
     return False
 
-def _min(val1, val2):
-   return val1 if (val1<val2) else val2
-
 def _pid_exists(pid):
     try:
         os.kill(pid,0)
@@ -547,7 +544,7 @@ class Plancton(Daemon):
         self.logctl.debug('<...CPU efficiency: %.2f%%...>' % self.efficiency)
         self.logctl.debug('<...CPU available:  %.2f%%...>' % self.idle)
         self.logctl.debug('<...Potentially fitting docks: %d...>' % int(self.idle*0.95*self._num_cpus/(self._cpus_per_dock*100)))
-        launchable_containers = _min(int(self.idle*0.95*self._num_cpus/(self._cpus_per_dock*100)), int(self._max_docks-running))
+        launchable_containers = min(int(self.idle*0.95*self._num_cpus/(self._cpus_per_dock*100)), int(self._max_docks-running))
         self.logctl.debug('<...Launchable docks: %d...>' % launchable_containers)
         for i in range(launchable_containers):
            self._deploy_container()
