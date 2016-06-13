@@ -41,7 +41,7 @@ def _pid_exists(pid):
         return True
 
 def _cpu_count():
-    return sum([ 1 for x in open('/proc/cpuinfo') if "bogomips" in x ])
+    return int(os.sysconf("SC_NPROCESSORS_ONLN"))
 
 def _cpu_times():
     return [ float(x) for x in open('/proc/uptime').read().split(' ') ]
@@ -245,7 +245,7 @@ class Plancton(Daemon):
            self._int_st['daemon']['rigidity'] = 1
         else:
            """ This should not occur """
-           self.logctl.warning("Setting rigidity to default: soft.")
+           self.logctl.warning("Setting rigidity to default: soft")
            self._int_st['daemon']['rigidity'] = 10
         
         self._int_st['configuration'] = {'Cmd': [ self._pilot_entrypoint ],
