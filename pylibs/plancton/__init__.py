@@ -114,7 +114,7 @@ class Plancton(Daemon):
              @param socket_location      Unix socket exposed by docker
         """
         super(Plancton, self).__init__(name, pidfile)
-        self._start_time = self._last_update_time = self._last_confup_time = utc_time()
+        self._start_time = self._last_update_time = self._last_confup_time = time.time()
         self.uptime0,self.idletime0 = cpu_times()
         self._logdir = logdir
         self._confdir = confdir
@@ -122,10 +122,12 @@ class Plancton(Daemon):
         self._num_cpus = cpu_count()
         self._hostname = gethostname().split('.')[0]
         self._cont_config = None  # container configuration (dict)
+        self._container_prefix = "plancton-slave"
         self.docker_client = Client(base_url=self.sockpath, version='auto')
         self._int_st = {
           "cputhresh"         : 100,         # percentage of all CPUs allotted to Plancton
           "updateconfig"      : 60,          # frequency of config updates (s)
+          "image_expiration"  : 43200,       # frequency of image updates (s)
           "maxcontainers"     : 1,           # maximum number of containers
           "morbidity"         : 30,          # main loop sleep (s)
           "rigidity"          : 10,          # kill containers after that many times over cputhresh
@@ -220,7 +222,7 @@ class Plancton(Daemon):
         self.idletime0 = curridletime
         self.efficiency = eff if eff > 0 else 0.0
 
-    def _overhead_control(self, name='plancton-slave', cputhreshold=70):
+    def _overhead_control(self, cputhreshold=70):
         """ Take decision on running containers, following config. policies.
             Please notice that there are two counters: one for the number of trial to do reaching the
             daemon, one (rigidity) for the number of loops to wait to effectively start to kill running
@@ -232,7 +234,7 @@ class Plancton(Daemon):
             self.logctl.warning('<...Latest %d measurement(s) shows a threshold exceeding...>' % \
                 self._overhead_tol_counter)
             if self._overhead_tol_counter >= self._int_st['daemon']['rigidity']:
-                cont_list = self._filtered_list(name=name)
+                cont_list = self._filtered_list(name=self._container_prefix)
                 if cont_list:
                     self.logctl.debug('<...Attempting to remove container: %s...>' % \
                         cont_list[0]['Id'])
@@ -254,24 +256,13 @@ class Plancton(Daemon):
             self._overhead_tol_counter=0
         return
 
-    def _get_setup_info(self):
-        """ Just a dummy check if the docker deamon is running.
-            @return True if the request sucess, False otherwise.
-        """
-        try:
-            self._int_st['system'] = self.docker_info()
-            return True
-        except Exception, e:
-            self.logctl.error('<...Failed to get docker setup info...>')
-            return False
-
-    def _create_container_by_name(self, cname_prefix=''):
+    def _create_container(self):
         """ Create a container from a given image. Created containers must be started.
             @return the container id if the request sucess, None if an exception is raised.
         """
         container_unique_hash = ''.join(random.SystemRandom().choice( string.ascii_uppercase \
             + string.digits + string.ascii_lowercase) for _ in range(6))
-        cname = cname_prefix + '-' + container_unique_hash
+        cname = self._container_prefix + '-' + container_unique_hash
         self._int_st['configuration']['Hostname'] = 'plancton' + '-' + self._hostname + '-' + container_unique_hash
         self.logctl.debug(self._int_st['configuration'])
         self.logctl.debug('<...Creating container => %s...> ' % cname)
@@ -313,63 +304,34 @@ class Plancton(Daemon):
                         % (container['Id'], jj['State']['Pid']))
                     return None
 
-    def _deploy_container(self, cname='plancton-slave'):
-        """ Deploy a container.
-            @return Nothing
-        """
-        self._start_container(self._create_container_by_name(cname_prefix=cname))
-        return
+    def _dump_container_list(self):
+      status_table = PrettyTable(['n\'', 'docker hash', 'status', 'docker name', 'pid'])
+      try:
+        clist = self.container_list(all=True)
+      except Exception as e:
+        self.logctl.error("Couldn't get container list: %s", e)
+      num = 0
+      for c in clist:
+        if c['Names'][0][1:].startswith(self._container_prefix):
+          num = num+1
+          shortid = c['Id'][:12]
+          status = " active " if c['Status'].startswith("Up") else "inactive"
+          name = c['Names'][0][1:]
+          pid = self.container_inspect(id=c['Id'])['State'].get('Pid', 0)
+          pid = " --- " if pid == 0 else str(pid)
+          status_table.add_row([num, shortid, status, name, pid])
+      self.logctl.info('Container list:\n' + str(status_table))
 
-    def _dump_container_list(self, cname='plancton-slave'):
-        """ Log some informations about running containers.
-            @return nothing.
-        """
-        status_table = PrettyTable(['n\'', 'docker hash', 'status', 'docker name', 'pid'])
-
-        try:
-            clist = self.container_list(all=True)
-        except Exception as e:
-            self.logctl.error('<...Couldn\'t get container list! %s...>', e)
-        else:
-            for i in range(0,len(clist)):
-                if cname in str(clist[i]['Names'][0].replace('/','')):
-                    num = i+1
-                    shortid = str(clist[i]['Id'])[:12]
-                    status = ''
-                    if 'Up' in str(clist[i]['Status']):
-                        status = ' active '
-                    else:
-                        status = 'inactive'
-                    name = str(clist[i]['Names'][0].replace('/',''))
-                    pid = self.container_inspect(id=str(clist[i]['Id']))['State'].get('Pid', ' --- ')
-                    if pid is 0:
-                        pid = ' --- '
-                    else:
-                        pid = str(pid)
-                    status_table.add_row([num, shortid, status, name, pid ])
-
-        self.logctl.info('\n' + str(status_table))
-        return
-
-
-    def _count_containers(self, name='plancton-slave'):
-        """ Count the number of tagged containers.
-            @return that number.
-        """
-        running = 0
-        try:
-            clist = self.container_list(all=False)
-        except Exception as e:
-            self.logctl.error('<...Couldn\'t get containers list, defaultin running value to zero. \n %s...>', e)
-            pass
-        else:
-            for i in clist:
-                if 'Up' in str(i['Status']) and name in str(i['Names']):
-                    running = running+1
-        return running
+    def _count_containers(self):
+      try:
+        clist = self.container_list(all=False)
+      except Exception as e:
+        self.logctl.error("Couldn't get containers list, defaulting running value to zero: %s", e)
+        return 0
+      return len([ x for x in clist if x["Status"].startswith("Up") ])
 
     # Clean up dead or stale containers.
-    def _control_containers(self, name='plancton-slave'):
+    def _control_containers(self):
       try:
         clist = self.container_list(all=True)
       except Exception as e:
@@ -377,7 +339,7 @@ class Plancton(Daemon):
         return
 
       for i in clist:
-        if not i['Names'][0][1:].startswith(name):
+        if not i['Names'][0][1:].startswith(self._container_prefix):
           self.logctl.debug("Ignoring container %s", i["Names"][0])
           continue
 
@@ -448,8 +410,6 @@ class Plancton(Daemon):
         self._read_conf()
         self.docker_pull(*self._int_st["docker_image"].split(":", 1))
         self._control_containers()
-        sys.exit(42)
-        self._get_setup_info()
         self._do_main_loop = True
 
     def main_loop(self):
@@ -462,23 +422,27 @@ class Plancton(Daemon):
             @return Nothing
         """
         self._set_cpu_efficiency()
-        whattimeisit = utc_time()
-        delta_1 = whattimeisit - self._last_confup_time
-        delta_2 = whattimeisit - self._last_update_time
+        now = time.time()
+        delta_config = now - self._last_confup_time
+        delta_update = now - self._last_update_time
         self._overhead_control()
-        if (delta_1 >= int(self._int_st['daemon']['updateconfig'])):
-            self._pull_image()
-            self._last_confup_time = utc_time()
+        if delta_update >= int(self._int_st['image_expiration']):
+          self._pull_image()
+          self._last_update_time = time.time()
+        if delta_config >= int(self._int_st['updateconfig']):
+          self._read_conf()
+          self._last_confup_time = time.time()
         running = self._count_containers()
-        self.logctl.debug('<...CPU efficiency: %.2f%%...>' % self.efficiency)
-        self.logctl.debug('<...CPU available:  %.2f%%...>' % self.idle)
-        self.logctl.debug('<...Potentially fitting docks: %d...>' % int(self.idle*0.95*self._num_cpus/(self._cpus_per_dock*100)))
-        launchable_containers = min(int(self.idle*0.95*self._num_cpus/(self._cpus_per_dock*100)), int(self._max_docks-running))
-        self.logctl.debug('<...Launchable docks: %d...>' % launchable_containers)
-        for i in range(launchable_containers):
-           self._deploy_container()
+        self.logctl.debug('CPU efficiency: %.2f%%' % self.efficiency)
+        self.logctl.debug('CPU available:  %.2f%%' % self.idle)
+        fitting_docks = int(self.idle*0.95*self._num_cpus/(self._cpus_per_dock*100))
+        self.logctl.debug('Potentially fitting containers: %d (%d already running)', fitting_docks, running)
+        launchable_containers = min(fitting_docks, int(self._max_docks-running))
+        self.logctl.info('Will launch %d new container(s)' % launchable_containers)
+        for _ in range(launchable_containers):
+          self._start_container(self._create_container())
         self._control_containers()
-        self._last_update_time = utc_time()
+        self._last_update_time = time.time()
         self._dump_container_list()
 
     def run(self):
