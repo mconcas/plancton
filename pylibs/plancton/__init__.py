@@ -214,39 +214,31 @@ class Plancton(Daemon):
         self.idletime0 = curridletime
         self.efficiency = eff if eff > 0 else 0.0
 
-    def _overhead_control(self, cputhreshold=70):
-        """ Take decision on running containers, following config. policies.
-            Please notice that there are two counters: one for the number of trial to do reaching the
-            daemon, one (rigidity) for the number of loops to wait to effectively start to kill running
-            containers.
-           @return nothing.
-        """
-        if self.efficiency > cputhreshold:
-            self._overhead_tol_counter = self._overhead_tol_counter+1
-            self.logctl.warning('<...Latest %d measurement(s) shows a threshold exceeding...>' % \
-                self._overhead_tol_counter)
-            if self._overhead_tol_counter >= self._int_st['daemon']['rigidity']:
-                cont_list = self._filtered_list(name=self._container_prefix)
-                if cont_list:
-                    self.logctl.debug('<...Attempting to remove container: %s...>' % \
-                        cont_list[0]['Id'])
-                    try:
-                        self.container_remove(cont_list[0]['Id'], force=True)
-                    except Exception as e:
-                        self.logctl.error('<...Can\'t remove %s due to an error...>' % \
-                            cont_list[0]['Id'])
-                        self.logctl.error(e)
-                    else:
-                        self.logctl.debug('<...Removed %s successfully...>' % \
-                            cont_list[0]['Id'])
-                        self._overhead_tol_counter=0
-                        return
-                else:
-                    self.logctl.debug('<...No active worker nodes found, nothing to do...>')
-                    self._overhead_tol_counter=0
-        else:
-            self._overhead_tol_counter=0
-        return
+    # Kill running containers exceeding a given CPU threshold.
+    def _overhead_control(self):
+      max_used_cpu = 100 * self._int_st["cpus_per_dock"] * self._count_containers() / cpu_count()
+      real_cputhresh = max(self._int_st["cputhresh"], max_used_cpu)
+      self.logctl.debug("Considering a threshold of %.2f%% of all CPUs", real_cputhresh)
+      if self.efficiency > real_cputhresh:
+        self._overhead_tol_counter = self._overhead_tol_counter+1
+        self.logctl.warning("CPU threshold trespassed for %d consecutive time(s) out of " % \
+                            (self._overhead_tol_counter, self._int_st["rigidity"]))
+        if self._overhead_tol_counter >= self._int_st['rigidity']:
+          cont_list = self._filtered_list(name=self._container_prefix)
+          if cont_list:
+            self.logctl.debug("Attempting to remove container: %s" % cont_list[0]['Id'])
+            try:
+              # TODO: kill the youngest container instead of the first
+              self.container_remove(cont_list[0]['Id'], force=True)
+            except Exception as e:
+              self.logctl.error("Cannot remove %s: %s", cont_list[0]["Id"], e)
+            else:
+              self.logctl.info('Container %s removed successfully' % cont_list[0]['Id'])
+          else:
+            self.logctl.debug('No workers found, nothing to do')
+            self._overhead_tol_counter = 0
+      else:
+        self._overhead_tol_counter = 0
 
     # Create a container. Returns the container ID on success, None otherwise.
     def _create_container(self):
@@ -357,38 +349,9 @@ class Plancton(Daemon):
           else:
             self.logctl.info('Removed container %s', i['Id'])
 
-    def _clean_up(self, name='plancton-slave'):
-        """ Kill all the tagged (running too) containers.
-            @return True if all containers are successfully wiped out, False otherwise.
-        """
-        ret = True
-        self.logctl.warning('cleaning up all tagged containers, this may take a while...')
-        try:
-            clist = self.container_list(all=True)
-        except Exception as e:
-            self.logctl.error('<...Couldn\'t get containers list! %s...>', e)
-            ret = False
-            return ret
-        else:
-            for i in clist:
-                if name in str(i['Names']):
-                    try:
-                        self.container_remove(id=str(i['Id']), force=True)
-                    except Exception as e:
-                        self.logctl.error('<...Couldn\'t remove container: %s...>' % str(i['Id']))
-                        self.logctl.error(e)
-                        ret = False
-                    else:
-                        self.logctl.info('<... => container id: %s out! ...>' % str(i['Id']))
-        return ret
-
     def onexit(self):
-        """ Action to perform when some exit signal is received.
-            @return True if success.
-        """
         self.logctl.info('Graceful termination requested: will exit gracefully soon...')
         self._do_main_loop = False
-
         return True
 
     def init(self):
