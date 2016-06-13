@@ -131,6 +131,7 @@ class Plancton(Daemon):
           "rigidity"          : 10,          # kill containers after that many times over cputhresh
           "cpus_per_dock"     : 1,           # number of CPUs per container (non-integer)
           "max_docks"         : "ncpus - 2", # expression to compute max number of containers
+          "max_ttl"           : 43200,       # max ttl for a container (default: 12 hours)
           "docker_image"      : "busybox",
           "docker_cmd"        : "/bin/sleep 10",
           "docker_privileged" : False
@@ -367,51 +368,45 @@ class Plancton(Daemon):
                     running = running+1
         return running
 
-    def _control_containers(self, name='plancton-slave', ttl_thresh_secs=12*60*60):
-        """ Get rid of exceeded ttl or exited or created containers.
-            @return nothing.
-        """
-        try:
-            clist = self.container_list(all=True)
-            """ safe assumption, in case of failure it won't start to spawn containers indefinitely """
-        except Exception as e:
-            self.logctl.error('<...Couldn\'t get containers list! %s...>', e)
+    # Clean up dead or stale containers.
+    def _control_containers(self, name='plancton-slave'):
+      try:
+        clist = self.container_list(all=True)
+      except Exception as e:
+        self.logctl.error("Couldn't get containers list: %s", e)
+        return
+
+      for i in clist:
+        if not i['Names'][0][1:].startswith(name):
+          self.logctl.debug("Ignoring container %s", i["Names"][0])
+          continue
+
+        to_remove = False
+
+        ## TTL threshold block
+        if i['Status'].startswith("Up"):
+          try:
+            insdata = self.container_inspect(i['Id'])
+          except Exception as e:
+            self.logctl.error("Couldn't get container information! %s", e)
+          else:
+            statobj = datetime.strptime(insdata['State']['StartedAt'][:19], "%Y-%m-%dT%H:%M:%S")
+            if (utc_time() - time.mktime(statobj.timetuple())) > self._int_st["max_ttl"]:
+              self.logctl.info('Killing %s since it exceeded the max TTL', i['Id'])
+              to_remove = True
+            else:
+              self.logctl.debug("Container %s is below its maximum TTL, leaving it alone", i["Id"])
         else:
-            for i in clist:
-                if name in str(i['Names']):
-                    ## TTL threshold block
-                    if 'Up' in str(i['Status']):
-                            try:
-                                insdata = self.container_inspect(i['Id'])
-                            except Exception as e:
-                                self.logctl.error('<...Couldn\'t get container informations! %s...>', e)
-                            else:
-                                statobj = datetime.strptime(insdata['State']['StartedAt'][:19], "%Y-%m-%dT%H:%M:%S")
-                                if (utc_time() - time.mktime(statobj.timetuple())) > ttl_thresh_secs:
-                                    self.logctl.info('<...Killing %s since it exceeded the ttl_thr...>' % i['Id'])
-                                    try:
-                                        self.container_remove(id=i['Id'], force=True)
-                                    except Exception as e:
-                                        # It may happen that this command goes in racing condition with
-                                        # manual container deletion, since this is not a big deal,
-                                        # I opted for a more permissive approach.
-                                        # That is not to critically stop the daemon, but simply
-                                        # wait for the next garbage collection.
-                                        self.logctl.warning('<...It couldn\'t be possible to remove container with id: %s passing anyway...>' % i['Id'])
-                                        self.logctl.error(e)
-                                    else:
-                                        self.logctl.info('<...Removed => %s ...>' % i['Id'])
-                        ## Cleanup Exited block
-                    else:
-                        try:
-                            self.logctl.debug("<...Removing => %s...>" % i['Id'])
-                            self.container_remove(id=i['Id'], force=True)
-                        except Exception as e:
-                            self.logctl.warning('<...It couldn\'t be possible to remove container with id: %s passing anyway...>' % i['Id'])
-                            self.logctl.error(e)
-                            pass
-                        else:
-                            self.logctl.info('<...Removed => %s ...>' % i['Id'])
+          self.logctl.info("Killing %s as it has a bad status (%s)", i["id"], i["Status"])
+          to_remove = True
+
+        if to_remove:
+          try:
+            self.container_remove(id=i['Id'], force=True)
+          except Exception as e:
+            self.logctl.warning('It was not possible to remove container with id %s: %s', i['Id'], e)
+          else:
+            self.logctl.info('Removed container %s', i['Id'])
 
     def _clean_up(self, name='plancton-slave'):
         """ Kill all the tagged (running too) containers.
@@ -448,14 +443,12 @@ class Plancton(Daemon):
         return True
 
     def init(self):
+        self.logctl.info('---- plancton daemon v%s ----' % self.__version__)
         self._setup_log_files()
         self._read_conf()
-        
-        self.logctl.info('---- plancton daemon v%s ----' % self.__version__)
-        # self._pull_image()
         self.docker_pull(*self._int_st["docker_image"].split(":", 1))
-        sys.exit(42)
         self._control_containers()
+        sys.exit(42)
         self._get_setup_info()
         self._do_main_loop = True
 
