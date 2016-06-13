@@ -25,7 +25,7 @@ def _apparmor_enabled():
        with open('/sys/module/apparmor/parameters/enabled', 'r') as f:
           return True if "Y" in f.read() else False
     else: return False
-      
+
 def _min(val1, val2):
    return val1 if (val1<val2) else val2
 
@@ -86,7 +86,7 @@ def robust(tries=5, delay=3, backoff=2):
                     ldelay *= backoff
                 except Exception, e:
                     raise
-            self.logctl.error('Couldn\'t make a [%s] request to the docker daemon... exiting.' % 
+            self.logctl.error('Couldn\'t make a [%s] request to the docker daemon... exiting.' %
                 f.__name__)
             return f(self, *args, **kwargs)
         return robust_call
@@ -101,7 +101,7 @@ class Plancton(Daemon):
     def container_remove(self, id, force):
         return self.docker_client.remove_container(container=id, force=force)
     @robust()
-    def docker_info(self): 
+    def docker_info(self):
         return self.docker_client.info
     @robust()
     def image_pull(self, repository, tag):
@@ -118,13 +118,13 @@ class Plancton(Daemon):
     @property
     def idle(self):
        return float(100 - self.efficiency)
-                                                                                                    
+
     def __init__(self, name, pidfile, logdir, confdir, socket_location='unix://var/run/docker.sock'):
-        """ Constructor                                                                                                                                                                      
-             @param name                 Name of the Daemon                                                              
-             @param pidfile              File where PID is written                                                
-             @param logdir               Directory with logfiles (rotated)                                        
-             @param socket_location      Unix socket exposed by docker                                            
+        """ Constructor
+             @param name                 Name of the Daemon
+             @param pidfile              File where PID is written
+             @param logdir               Directory with logfiles (rotated)
+             @param socket_location      Unix socket exposed by docker
         """
         super(Plancton, self).__init__(name, pidfile)
         """ Start time in UTC """
@@ -137,7 +137,7 @@ class Plancton(Daemon):
         """ CPU numbers """
         self._num_cpus = _cpu_count()
         """ Hostname """
-        self._hostname = socket.gethostname().split('.')[0] 
+        self._hostname = socket.gethostname().split('.')[0]
         """ Requests session """
         self._https_session = requests.Session()
         """ JSON container settings """
@@ -158,7 +158,7 @@ class Plancton(Daemon):
             }
         """ Overhead tolerance """
         self._overhead_tol_counter = 0
-    
+
     def _filtered_list(self, name, reverse=True):
         """ Get a list filtering only the running containers found.
             @return a list, or None
@@ -168,7 +168,7 @@ class Plancton(Daemon):
         self.logctl.debug('<...Filtering container list...>')
         if jlist:
             fjlist = [d for d in jlist if (name in str(d['Names']) and 'Up' in str(d['Status'])) ]
-            if fjlist:            
+            if fjlist:
                 self.logctl.debug('<...Sorting container list...>')
                 srtlist = sorted(fjlist, key=lambda k: k['Created'], reverse=reverse)
                 return srtlist
@@ -177,7 +177,7 @@ class Plancton(Daemon):
         else:
             self.logctl.debug('<...Empty DOCKER container list found, nothing to do...>')
         return None
-    
+
     def _setup_log_files(self):
         """ Setup use of logfiles, rotated and deleted periodically.
             @return Nothing is returned.
@@ -205,7 +205,7 @@ class Plancton(Daemon):
                 conf = yaml.safe_load(fp.read())
             self.logctl.debug(conf)
         except Exception as e:
-            self.logctl.error("Cannot read configuration file %s/config.yaml: %s" %     
+            self.logctl.error("Cannot read configuration file %s/config.yaml: %s" %
                 (self._confdir, e))
         self._pilot_entrypoint = conf.get("pilot_entrypoint", "/bin/bash")
         self._pilot_dock = conf.get("pilot_dock", "centos:centos6")
@@ -216,7 +216,7 @@ class Plancton(Daemon):
         privileged_ops = conf.get("pilot_privileged", False)
         condor_conf_dict = conf.get("dock_condor_conf", {})
         job_wrapper_path = conf.get("parrot_wrapper_path", {})
-        self._container_bind_list = [ 
+        self._container_bind_list = [
             condor_conf_dict['condor_common_conf'] + ':/etc/condor/config.d/10-common.config',
             condor_conf_dict['condor_worknode_conf'] + ':/etc/condor/config.d/00-worker.config',
             condor_conf_dict['condor_base_conf'] + ':/etc/condor/condor_config',
@@ -247,7 +247,7 @@ class Plancton(Daemon):
            """ This should not occur """
            self.logctl.warning("Setting rigidity to default: soft")
            self._int_st['daemon']['rigidity'] = 10
-        
+
         self._int_st['configuration'] = {'Cmd': [ self._pilot_entrypoint ],
                                          'Image': self._pilot_dock,
                                          'HostConfig': { 'CpuShares': int(self._cpu_shares),
@@ -258,7 +258,7 @@ class Plancton(Daemon):
                                         }
         if _apparmor_enabled():
            self._int_st['configuration']['HostConfig']['SecurityOpt'] = ['apparmor:docker-allow-ptrace']
-           
+
         self.logctl.debug(self._int_st)
 
     def _set_cpu_efficiency(self):
@@ -345,19 +345,19 @@ class Plancton(Daemon):
         self.logctl.debug(self._int_st['configuration'])
         self.logctl.debug('<...Creating container => %s...> ' % cname)
         try:
-            tmpcont = self.container_create_from_conf(jsonconf=json.loads(json.dumps( 
+            tmpcont = self.container_create_from_conf(jsonconf=json.loads(json.dumps(
             self._int_st['configuration'])), name=cname)
             return tmpcont
         except Exception as e:
             self.logctl.error('<...Couldn\'t create such a container => %s...>', e)
-            return None 
+            return None
 
     def _start_container(self, container):
         """ Start a created container. Perform a pid inspection and return it if the container is
             actually running. The container argument is a dictionary with an 'Id' : 'hash'
             key : value couple.
             @return pid of container if it's successfully found running after the start. None otherwise.
-        """ 
+        """
         self.logctl.debug('<...Starting => %s...>' % str(container['Id']))
         try:
             self.container_start(id=container['Id'])
@@ -366,7 +366,7 @@ class Plancton(Daemon):
 
         else:
             """ Make an inspect call to obtain container pid, in order to ease the monitoring.
-                Get pid. 
+                Get pid.
             """
             try:
                 jj = self.container_inspect(id=container['Id'])
@@ -384,7 +384,7 @@ class Plancton(Daemon):
 
     def _deploy_container(self, cname='plancton-slave'):
         """ Deploy a container.
-            @return Nothing 
+            @return Nothing
         """
         self._start_container(self._create_container_by_name(cname_prefix=cname))
         return
@@ -401,7 +401,7 @@ class Plancton(Daemon):
             self.logctl.error('<...Couldn\'t get container list! %s...>', e)
         else:
             for i in range(0,len(clist)):
-            	if cname in str(clist[i]['Names'][0].replace('/','')):
+                if cname in str(clist[i]['Names'][0].replace('/','')):
                     num = i+1
                     shortid = str(clist[i]['Id'])[:12]
                     status = ''
@@ -448,43 +448,41 @@ class Plancton(Daemon):
             self.logctl.error('<...Couldn\'t get containers list! %s...>', e)
         else:
             for i in clist:
-            	if name in str(i['Names']):
-            		## TTL threshold block
-	                if 'Up' in str(i['Status']):
-	                    try:
-	                        insdata = self.container_inspect(i['Id'])
-	                    except Exception as e:
-	                        self.logctl.error('<...Couldn\'t get container informations! %s...>', e)
-	                    else:
-	                        statobj = datetime.strptime(insdata['State']['StartedAt'][:19], "%Y-%m-%dT%H:%M:%S")
-	                        if (_utc_time() - time.mktime(statobj.timetuple())) > ttl_thresh_secs:
-	                            self.logctl.info('<...Killing %s since it exceeded the ttl_thr...>' % i['Id'])
-	                            try:
-	                                self.container_remove(id=i['Id'], force=True)
-	                            except Exception as e:
-	                                """ It may happen that this command goes in racing condition with 
-	                                    manual container deletion, since this is not a big deal, 
-	                                    I opted for a more permissive approach.
-	                                    That is not to critically stop the daemon, but simply 
-	                                    wait for the next garbage collection.
-					                """
-	                                self.logctl.warning('<...It couldn\'t be possible to remove container with id: %s passing anyway...>' % i['Id'])
-	                                self.logctl.error(e)
-	                                pass
-	                            else:
-	                                self.logctl.info('<...Removed => %s ...>' % i['Id'])
-	                ## Cleanup Exited block
-	                else:
-	                    try:
-	                        self.logctl.debug("<...Removing => %s...>" % i['Id'])
-	                        self.container_remove(id=i['Id'], force=True)
-	                    except Exception as e:
-	                        self.logctl.warning('<...It couldn\'t be possible to remove container with id: %s passing anyway...>' % i['Id'])
-	                        self.logctl.error(e)
-	                        pass
-	                    else:
-	                        self.logctl.info('<...Removed => %s ...>' % i['Id'])
- 
+                if name in str(i['Names']):
+                    ## TTL threshold block
+                    if 'Up' in str(i['Status']):
+                            try:
+                                insdata = self.container_inspect(i['Id'])
+                            except Exception as e:
+                                self.logctl.error('<...Couldn\'t get container informations! %s...>', e)
+                            else:
+                                statobj = datetime.strptime(insdata['State']['StartedAt'][:19], "%Y-%m-%dT%H:%M:%S")
+                                if (_utc_time() - time.mktime(statobj.timetuple())) > ttl_thresh_secs:
+                                    self.logctl.info('<...Killing %s since it exceeded the ttl_thr...>' % i['Id'])
+                                    try:
+                                        self.container_remove(id=i['Id'], force=True)
+                                    except Exception as e:
+                                        # It may happen that this command goes in racing condition with
+                                        # manual container deletion, since this is not a big deal,
+                                        # I opted for a more permissive approach.
+                                        # That is not to critically stop the daemon, but simply
+                                        # wait for the next garbage collection.
+                                        self.logctl.warning('<...It couldn\'t be possible to remove container with id: %s passing anyway...>' % i['Id'])
+                                        self.logctl.error(e)
+                                    else:
+                                        self.logctl.info('<...Removed => %s ...>' % i['Id'])
+                        ## Cleanup Exited block
+                    else:
+                        try:
+                            self.logctl.debug("<...Removing => %s...>" % i['Id'])
+                            self.container_remove(id=i['Id'], force=True)
+                        except Exception as e:
+                            self.logctl.warning('<...It couldn\'t be possible to remove container with id: %s passing anyway...>' % i['Id'])
+                            self.logctl.error(e)
+                            pass
+                        else:
+                            self.logctl.info('<...Removed => %s ...>' % i['Id'])
+
     def _clean_up(self, name='plancton-slave'):
         """ Kill all the tagged (running too) containers.
             @return True if all containers are successfully wiped out, False otherwise.
@@ -516,9 +514,9 @@ class Plancton(Daemon):
         """
         self.logctl.info('Graceful termination requested: will exit gracefully soon...')
         self._do_main_loop = False
-        
+
         return True
-        
+
     def init(self):
         self._setup_log_files()
         self._read_conf()
@@ -549,7 +547,7 @@ class Plancton(Daemon):
         self.logctl.debug('<...CPU efficiency: %.2f%%...>' % self.efficiency)
         self.logctl.debug('<...CPU available:  %.2f%%...>' % self.idle)
         self.logctl.debug('<...Potentially fitting docks: %d...>' % int(self.idle*0.95*self._num_cpus/(self._cpus_per_dock*100)))
-        launchable_containers = _min(int(self.idle*0.95*self._num_cpus/(self._cpus_per_dock*100)), int(self._max_docks-running)) 
+        launchable_containers = _min(int(self.idle*0.95*self._num_cpus/(self._cpus_per_dock*100)), int(self._max_docks-running))
         self.logctl.debug('<...Launchable docks: %d...>' % launchable_containers)
         for i in range(launchable_containers):
            self._deploy_container()
