@@ -1,24 +1,14 @@
 # -*- coding: utf-8 -*-
-import base64
-import docker
-import errno
+import docker, json, pprint, requests, yaml
+import base64, string, socket, time, os, random, errno
 from functools import wraps
-import json
 import logging, logging.handlers
-import os
-import pprint
 from prettytable import PrettyTable
-import random
-import requests
-import string
-import socket
-import time
 from datetime import datetime
 from daemon import Daemon
 from docker import Client
 import docker.errors as de
 import requests.exceptions as re
-import yaml
 
 def apparmor_enabled():
   try:
