@@ -20,11 +20,11 @@ import docker.errors as de
 import requests.exceptions as re
 import yaml
 
-def _apparmor_enabled():
-    if os.path.isfile('/sys/module/apparmor/parameters/enabled'):
-       with open('/sys/module/apparmor/parameters/enabled', 'r') as f:
-          return True if "Y" in f.read() else False
-    else: return False
+def apparmor_enabled():
+  try:
+    return open("/sys/module/apparmor/parameters/enabled").read().strip() == "Y"
+  except IOError:
+    return False
 
 def _min(val1, val2):
    return val1 if (val1<val2) else val2
@@ -256,7 +256,7 @@ class Plancton(Daemon):
                                                          'Binds': self._container_bind_list
                                                        }
                                         }
-        if _apparmor_enabled():
+        if apparmor_enabled():
            self._int_st['configuration']['HostConfig']['SecurityOpt'] = ['apparmor:docker-allow-ptrace']
 
         self.logctl.debug(self._int_st)
