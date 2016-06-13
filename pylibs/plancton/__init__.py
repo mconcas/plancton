@@ -10,6 +10,7 @@ from datetime import datetime
 from daemon import Daemon
 from docker import Client
 import docker.errors as de
+import requests.exceptions as re
 import sys
 
 def apparmor_enabled():
