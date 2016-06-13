@@ -354,7 +354,7 @@ class Plancton(Daemon):
             else:
               self.logctl.debug("Container %s is below its maximum TTL, leaving it alone", i["Id"])
         else:
-          self.logctl.info("Killing %s as it has a bad status (%s)", i["id"], i["Status"])
+          self.logctl.info("Killing %s as it has a bad status (%s)", i["Id"], i["Status"])
           to_remove = True
 
         if to_remove:
