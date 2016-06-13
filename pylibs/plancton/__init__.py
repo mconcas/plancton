@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 import docker, json, pprint, requests, yaml
-import base64, string, socket, time, os, random, errno
+import base64, string, time, os, random, errno
 from functools import wraps
+from yaml import YAMLError
+from socket import gethostname
 import logging, logging.handlers
 from prettytable import PrettyTable
 from datetime import datetime
 from daemon import Daemon
 from docker import Client
 import docker.errors as de
-import requests.exceptions as re
+import sys
 
 def apparmor_enabled():
   try:
@@ -111,36 +113,27 @@ class Plancton(Daemon):
              @param socket_location      Unix socket exposed by docker
         """
         super(Plancton, self).__init__(name, pidfile)
-        """ Start time in UTC """
         self._start_time = self._last_update_time = self._last_confup_time = utc_time()
-        """ Get cputimes for resource monitoring """
         self.uptime0,self.idletime0 = cpu_times()
         self._logdir = logdir
         self._confdir = confdir
         self.sockpath = socket_location
-        """ CPU numbers """
         self._num_cpus = cpu_count()
-        """ Hostname """
-        self._hostname = socket.gethostname().split('.')[0]
-        """ Requests session """
-        self._https_session = requests.Session()
-        """ JSON container settings """
-        self._cont_config = None
-        """ docker client """
+        self._hostname = gethostname().split('.')[0]
+        self._cont_config = None  # container configuration (dict)
         self.docker_client = Client(base_url=self.sockpath, version='auto')
-        """ Internal status dictionary """
         self._int_st = {
-            'system'     : {},
-            'daemon'     : {
-                'version'        : self.__version__,
-                'updateinterval' : 65,
-                'updateconfig'   : 60,
-                'rigidity'       : 10,
-                'morbidity'      : 30
-            },
-            'configuration' : {},
-            }
-        """ Overhead tolerance """
+          "cputhresh"         : 100,         # percentage of all CPUs allotted to Plancton
+          "updateconfig"      : 60,          # frequency of config updates (s)
+          "maxcontainers"     : 1,           # maximum number of containers
+          "morbidity"         : 30,          # main loop sleep (s)
+          "rigidity"          : 10,          # kill containers after that many times over cputhresh
+          "cpus_per_dock"     : 1,           # number of CPUs per container (non-integer)
+          "max_docks"         : "ncpus - 2", # expression to compute max number of containers
+          "docker_image"      : "busybox",
+          "docker_cmd"        : "/bin/sleep 10",
+          "docker_privileged" : False
+        }
         self._overhead_tol_counter = 0
 
     def _filtered_list(self, name, reverse=True):
@@ -180,70 +173,37 @@ class Plancton(Daemon):
         self.logctl.addHandler(log_file_handler)
 
     def _read_conf(self):
-        """ Read configuration from file.
-            @return Nothing is returned.
-        """
-        conf = {}
-        try:
-            with open(self._confdir+"/config.yaml") as fp:
-                conf = yaml.safe_load(fp.read())
-            self.logctl.debug(conf)
-        except Exception as e:
-            self.logctl.error("Cannot read configuration file %s/config.yaml: %s" %
-                (self._confdir, e))
-        self._pilot_entrypoint = conf.get("pilot_entrypoint", "/bin/bash")
-        self._pilot_dock = conf.get("pilot_dock", "centos:centos6")
-        self._cpus_per_dock = float(conf.get("cpus_per_dock", 1))
-        ncpus = cpu_count()
-        self._max_docks = int(eval(str(conf.get("max_docks", "ncpus - 2"))))
-        self._cpu_shares = self._cpus_per_dock*1024/ncpus
-        privileged_ops = conf.get("pilot_privileged", False)
-        condor_conf_dict = conf.get("dock_condor_conf", {})
-        job_wrapper_path = conf.get("parrot_wrapper_path", {})
-        self._container_bind_list = [
-            condor_conf_dict['condor_common_conf'] + ':/etc/condor/config.d/10-common.config',
-            condor_conf_dict['condor_worknode_conf'] + ':/etc/condor/config.d/00-worker.config',
-            condor_conf_dict['condor_base_conf'] + ':/etc/condor/condor_config',
-            job_wrapper_path + ':/etc/condor/parrot_job_wrapper.sh' ]
+      try:
+        conf = yaml.safe_load(open(self._confdir+"/config.yaml").read())
+      except (IOError, YAMLError) as e:
+        self.logctl.error("%s/config.yaml could not be read, using previous one: %s" % (self._confdir, e))
+        return
+      for k in self._int_st:
+        self._int_st[k] = conf.get(k, self._int_st[k])
 
-        self._int_st['daemon']['maxcontainers'] = self._max_docks
-        self._int_st['daemon']['cputhresh'] = conf.get("cputhresh", "75")
+      for k,v in { "soft": 120, "medium": 60, "hard": 30 }.items():
+        if self._int_st["morbidity"] == k:
+          self._int_st["morbidity"] = v
 
-        """ How  much the daemon will wait before updating the status of containers """
-        upint = conf.get("morbidity", "medium")
-        if 'soft' in upint:
-           self._int_st['daemon']['morbidity'] = 120
-        elif 'medium' in upint:
-           self._int_st['daemon']['morbidity'] = 60
-        elif 'hard' in upint:
-           self._int_st['daemon']['morbidity'] = 30
-        else:
-           self.logctl.warning('Setting morbidity to default: hard')
-           self._int_st['daemon']['morbidity'] = 30
-        rigid = str(conf.get("rigidity", "soft"))
-        if 'soft' in rigid:
-           self._int_st['daemon']['rigidity'] = 10
-        elif 'medium' in rigid:
-           self._int_st['daemon']['rigidity'] = 5
-        elif 'hard' in rigid:
-           self._int_st['daemon']['rigidity'] = 1
-        else:
-           """ This should not occur """
-           self.logctl.warning("Setting rigidity to default: soft")
-           self._int_st['daemon']['rigidity'] = 10
+      for k,v in { "soft": 10, "medium": 5, "hard": 1 }.items():
+        if self._int_st["rigidity"] == k:
+          self._int_st["rigidity"] = v
 
-        self._int_st['configuration'] = {'Cmd': [ self._pilot_entrypoint ],
-                                         'Image': self._pilot_dock,
-                                         'HostConfig': { 'CpuShares': int(self._cpu_shares),
-                                                         'NetworkMode':'bridge',
-                                                         'Privileged': privileged_ops,
-                                                         'Binds': self._container_bind_list
-                                                       }
-                                        }
-        if apparmor_enabled():
-           self._int_st['configuration']['HostConfig']['SecurityOpt'] = ['apparmor:docker-allow-ptrace']
+      ncpus = cpu_count()
+      self._int_st["max_docks"] = int(eval(str(self._int_st["max_docks"])))
 
-        self.logctl.debug(self._int_st)
+      self.logctl.debug("Configuration:\n%s" % json.dumps(self._int_st, indent=2))
+
+      #self._int_st['configuration'] = {'Cmd': [ self._pilot_entrypoint ],
+      #                                 'Image': self._pilot_dock,
+      #                                 'HostConfig': { 'CpuShares': int(self._cpu_shares),
+      #                                                 'NetworkMode':'bridge',
+      #                                                 'Privileged': privileged_ops,
+      #                                                 'Binds': self._container_bind_list
+      #                                               }
+      #                                }
+      #if apparmor_enabled():
+      #   self._int_st['configuration']['HostConfig']['SecurityOpt'] = ['apparmor:docker-allow-ptrace']
 
     def _set_cpu_efficiency(self):
         """ Get CPU efficiency percentage. Efficiency is calculated subtracting idletime per cpu from
@@ -504,6 +464,7 @@ class Plancton(Daemon):
     def init(self):
         self._setup_log_files()
         self._read_conf()
+        sys.exit(42)
         self.logctl.info('---- plancton daemon v%s ----' % self.__version__)
         self._pull_image()
         self._control_containers()
