@@ -269,35 +269,28 @@ class Plancton(Daemon):
         self.logctl.error("Cannot create container: %s", e)
         return None
 
+    # Start a created container. Perform a PID inspection, return it if the container is really
+    # running.
     def _start_container(self, container):
-        """ Start a created container. Perform a pid inspection and return it if the container is
-            actually running. The container argument is a dictionary with an 'Id' : 'hash'
-            key : value couple.
-            @return pid of container if it's successfully found running after the start. None otherwise.
-        """
-        self.logctl.debug('<...Starting => %s...>' % str(container['Id']))
-        try:
-            self.container_start(id=container['Id'])
-        except Exception as e:
-            self.logctl.error(e)
+      self.logctl.debug("Starting %s" % str(container['Id']))
+      try:
+        self.container_start(id=container['Id'])
+      except Exception as e:
+        self.logctl.error(e)
+        return None
 
-        else:
-            """ Make an inspect call to obtain container pid, in order to ease the monitoring.
-                Get pid.
-            """
-            try:
-                jj = self.container_inspect(id=container['Id'])
-            except Exception as e:
-                self.logctl.error(e)
-            else:
-                if pid_exists(jj['State']['Pid']):
-                    self.logctl.info('<...Spawned => %s => PID: %s...>' % (str(container['Id'])[:12], \
-                        jj['State']['Pid']))
-                    return jj['State']['Pid']
-                else:
-                    self.logctl.error('No active process found for %s with pid: %s.'
-                        % (container['Id'], jj['State']['Pid']))
-                    return None
+      try:
+        jj = self.container_inspect(id=container['Id'])
+      except Exception as e:
+        self.logctl.error(e)
+        return None
+
+      if pid_exists(jj['State']['Pid']):
+        self.logctl.info('Spawned %s (main PID: %s)' % (str(container['Id'])[:12], jj['State']['Pid']))
+        return jj['State']['Pid']
+      else:
+        self.logctl.error('No active process found for %s with PID %s.' % (container['Id'], jj['State']['Pid']))
+        return None
 
     def _dump_container_list(self):
       status_table = PrettyTable(['n\'', 'docker hash', 'status', 'docker name', 'pid'])
