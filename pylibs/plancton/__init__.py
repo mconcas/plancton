@@ -239,7 +239,7 @@ class Plancton(Daemon):
             "HostConfig" : { "CpuShares"   : self._int_st["cpus_per_dock"]*1024/cpu_count(),
                              "NetworkMode" : "bridge",
                              "SecurityOpt" : ["apparmor:docker-allow-ptrace"] if apparmor_enabled() else [],
-                             "Binds"       : [ x+":ro" for x in self._int_st["binds"] ],
+                             "Binds"       : [ x+":ro,Z" for x in self._int_st["binds"] ],
                              "Privileged"  : self._int_st["docker_privileged"] }
           }
       #"Binds": self._container_bind_list
