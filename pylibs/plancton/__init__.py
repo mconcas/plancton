@@ -126,38 +126,27 @@ class Plancton(Daemon):
         self._container_prefix = "plancton-slave"
         self.docker_client = Client(base_url=self.sockpath, version='auto')
         self._int_st = {
-          "cputhresh"         : 100,         # percentage of all CPUs allotted to Plancton
-          "updateconfig"      : 60,          # frequency of config updates (s)
-          "image_expiration"  : 43200,       # frequency of image updates (s)
-          "morbidity"         : 30,          # main loop sleep (s)
-          "rigidity"          : 10,          # kill containers after that many times over cputhresh
-          "cpus_per_dock"     : 1,           # number of CPUs per container (non-integer)
-          "max_docks"         : "ncpus - 2", # expression to compute max number of containers
-          "max_ttl"           : 43200,       # max ttl for a container (default: 12 hours)
-          "docker_image"      : "busybox",
-          "docker_cmd"        : "/bin/sleep 10",
-          "docker_privileged" : False
+          "cputhresh"         : 100,             # percentage of all CPUs allotted to Plancton
+          "updateconfig"      : 60,              # frequency of config updates (s)
+          "image_expiration"  : 43200,           # frequency of image updates (s)
+          "morbidity"         : 30,              # main loop sleep (s)
+          "rigidity"          : 10,              # kill containers after that many times over cputhresh
+          "cpus_per_dock"     : 1,               # number of CPUs per container (non-integer)
+          "max_docks"         : "ncpus - 2",     # expression to compute max number of containers
+          "max_ttl"           : 43200,           # max ttl for a container (default: 12 hours)
+          "docker_image"      : "busybox",       # Docker image: repository[:tag]
+          "docker_cmd"        : "/bin/sleep 10", # command to run (string or list)
+          "docker_privileged" : False            # give super privileges to the container
         }
         self._overhead_tol_counter = 0
 
+    # Get only own running containers, youngest container first if reverse=True.
     def _filtered_list(self, name, reverse=True):
-        """ Get a list filtering only the running containers found.
-            @return a list, or None
-        """
-        self.logctl.debug('<...Fetching container list...>')
-        jlist = self.container_list(all=True)
-        self.logctl.debug('<...Filtering container list...>')
-        if jlist:
-            fjlist = [d for d in jlist if (name in str(d['Names']) and 'Up' in str(d['Status'])) ]
-            if fjlist:
-                self.logctl.debug('<...Sorting container list...>')
-                srtlist = sorted(fjlist, key=lambda k: k['Created'], reverse=reverse)
-                return srtlist
-            else:
-                self.logctl.debug('<...Empty PLANCTON container list found, nothing to do...>')
-        else:
-            self.logctl.debug('<...Empty DOCKER container list found, nothing to do...>')
-        return None
+      self.logctl.debug("Fetching list of Plancton running containers")
+      jlist = self.container_list(all=True)
+      fjlist = [ d for d in jlist if (d["Names"][0][1:].startswith(name) and d["Status"].startswith("Up")) ]
+      srtlist = sorted(fjlist, key=lambda k: k["Created"], reverse=reverse)
+      return srtlist
 
     def _setup_log_files(self):
         """ Setup use of logfiles, rotated and deleted periodically.
@@ -228,7 +217,6 @@ class Plancton(Daemon):
           if cont_list:
             self.logctl.debug("Attempting to remove container: %s" % cont_list[0]['Id'])
             try:
-              # TODO: kill the youngest container instead of the first
               self.container_remove(cont_list[0]['Id'], force=True)
             except Exception as e:
               self.logctl.error("Cannot remove %s: %s", cont_list[0]["Id"], e)
