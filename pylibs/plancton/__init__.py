@@ -423,7 +423,7 @@ class Plancton(Daemon):
         self.logctl.debug('CPU efficiency: %.2f%%' % self.efficiency)
         self.logctl.debug('CPU available:  %.2f%%' % self.idle)
         fitting_docks = int(self.idle*0.95*self._num_cpus/(self._int_st["cpus_per_dock"]*100))
-        self.logctl.debug('Potentially fitting containers: %d (%d already running)', fitting_docks, running)
+        self.logctl.debug('Potentially fitting containers based on CPU utilisation: %d', fitting_docks)
         launchable_containers = min(fitting_docks, int(self._int_st["max_docks"]-running))
         self.logctl.info('Will launch %d new container(s)' % launchable_containers)
         for _ in range(launchable_containers):
