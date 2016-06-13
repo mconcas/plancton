@@ -196,18 +196,10 @@ class Plancton(Daemon):
       ncpus = cpu_count()
       self._int_st["max_docks"] = int(eval(str(self._int_st["max_docks"])))
 
-      self.logctl.debug("Configuration:\n%s" % json.dumps(self._int_st, indent=2))
+      if not isinstance(self._int_st["docker_cmd"], list):
+        self._int_st["docker_cmd"] = self._int_st["docker_cmd"].split(" ")
 
-      #self._int_st['configuration'] = {'Cmd': [ self._pilot_entrypoint ],
-      #                                 'Image': self._pilot_dock,
-      #                                 'HostConfig': { 'CpuShares': int(self._cpu_shares),
-      #                                                 'NetworkMode':'bridge',
-      #                                                 'Privileged': privileged_ops,
-      #                                                 'Binds': self._container_bind_list
-      #                                               }
-      #                                }
-      #if apparmor_enabled():
-      #   self._int_st['configuration']['HostConfig']['SecurityOpt'] = ['apparmor:docker-allow-ptrace']
+      self.logctl.debug("Configuration:\n%s" % json.dumps(self._int_st, indent=2))
 
     def _set_cpu_efficiency(self):
         """ Get CPU efficiency percentage. Efficiency is calculated subtracting idletime per cpu from
@@ -256,23 +248,25 @@ class Plancton(Daemon):
             self._overhead_tol_counter=0
         return
 
+    # Create a container. Returns the container ID on success, None otherwise.
     def _create_container(self):
-        """ Create a container from a given image. Created containers must be started.
-            @return the container id if the request sucess, None if an exception is raised.
-        """
-        container_unique_hash = ''.join(random.SystemRandom().choice( string.ascii_uppercase \
-            + string.digits + string.ascii_lowercase) for _ in range(6))
-        cname = self._container_prefix + '-' + container_unique_hash
-        self._int_st['configuration']['Hostname'] = 'plancton' + '-' + self._hostname + '-' + container_unique_hash
-        self.logctl.debug(self._int_st['configuration'])
-        self.logctl.debug('<...Creating container => %s...> ' % cname)
-        try:
-            tmpcont = self.container_create_from_conf(jsonconf=json.loads(json.dumps(
-            self._int_st['configuration'])), name=cname)
-            return tmpcont
-        except Exception as e:
-            self.logctl.error('<...Couldn\'t create such a container => %s...>', e)
-            return None
+      uuid = ''.join(random.SystemRandom().choice(string.digits + string.ascii_lowercase) for _ in range(6))
+      cname = self._container_prefix + '-' + uuid
+      c = { "Cmd"        : self._int_st["docker_cmd"],
+            "Image"      : self._int_st["docker_image"],
+            "Hostname"   : "plancton-%s-%s" % (self._hostname, uuid),
+            "HostConfig" : { "CpuShares"   : self._int_st["cpus_per_dock"]*1024/cpu_count(),
+                             "NetworkMode" : "bridge",
+                             "SecurityOpt" : ["apparmor:docker-allow-ptrace"] if apparmor_enabled() else [],
+                             "Privileged"  : self._int_st["docker_privileged"] }
+          }
+      #"Binds": self._container_bind_list
+      self.logctl.debug("Container definition for %s:\n%s" % (cname, json.dumps(c, indent=2)))
+      try:
+        return self.container_create_from_conf(jsonconf=c, name=cname)
+      except Exception as e:
+        self.logctl.error("Cannot create container: %s", e)
+        return None
 
     def _start_container(self, container):
         """ Start a created container. Perform a pid inspection and return it if the container is
