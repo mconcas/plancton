@@ -440,18 +440,14 @@ class Plancton(Daemon):
         self._last_update_time = time.time()
         self._dump_container_list()
 
+    # Main daemon function. Return is in the range 0-255.
     def run(self):
-        """ Daemon's main function.
-            @return Exit code of the daemon: keep it in the range 0-255
-        """
-        self.init()
-        while self._do_main_loop:
-            count = 0
-            self.main_loop()
-            while self._do_main_loop and count < self._int_st['daemon']['morbidity']:
-                time.sleep(1)
-                count = count+1
-
-        self.logctl.info('Exiting gracefully!')
-
-        return 0
+      self.init()
+      while self._do_main_loop:
+        count = 0
+        self.main_loop()
+        while self._do_main_loop and count < self._int_st["morbidity"]:
+          time.sleep(1)
+          count = count+1
+      self.logctl.info("Exiting gracefully!")
+      return 0
