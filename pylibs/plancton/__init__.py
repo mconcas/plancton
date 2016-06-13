@@ -129,7 +129,6 @@ class Plancton(Daemon):
           "cputhresh"         : 100,         # percentage of all CPUs allotted to Plancton
           "updateconfig"      : 60,          # frequency of config updates (s)
           "image_expiration"  : 43200,       # frequency of image updates (s)
-          "maxcontainers"     : 1,           # maximum number of containers
           "morbidity"         : 30,          # main loop sleep (s)
           "rigidity"          : 10,          # kill containers after that many times over cputhresh
           "cpus_per_dock"     : 1,           # number of CPUs per container (non-integer)
