@@ -136,7 +136,8 @@ class Plancton(Daemon):
           "max_ttl"           : 43200,           # max ttl for a container (default: 12 hours)
           "docker_image"      : "busybox",       # Docker image: repository[:tag]
           "docker_cmd"        : "/bin/sleep 10", # command to run (string or list)
-          "docker_privileged" : False            # give super privileges to the container
+          "docker_privileged" : False,           # give super privileges to the container
+          "binds"             : []               # list of bind mounts (all in read-only)
         }
         self._overhead_tol_counter = 0
 
@@ -238,6 +239,7 @@ class Plancton(Daemon):
             "HostConfig" : { "CpuShares"   : self._int_st["cpus_per_dock"]*1024/cpu_count(),
                              "NetworkMode" : "bridge",
                              "SecurityOpt" : ["apparmor:docker-allow-ptrace"] if apparmor_enabled() else [],
+                             "Binds"       : [ x+":ro" for x in self._int_st["binds"] ],
                              "Privileged"  : self._int_st["docker_privileged"] }
           }
       #"Binds": self._container_bind_list
