@@ -246,7 +246,6 @@ class Plancton(Daemon):
                              "MemorySwap"  : self._int_st["max_dock_mem"]+self._int_st["max_dock_swap"],
                              "Privileged"  : self._int_st["docker_privileged"] }
           }
-      #"Binds": self._container_bind_list
       self.logctl.debug("Container definition for %s:\n%s" % (cname, json.dumps(c, indent=2)))
       try:
         return self.container_create_from_conf(jsonconf=c, name=cname)
@@ -257,6 +256,8 @@ class Plancton(Daemon):
     # Start a created container. Perform a PID inspection, return it if the container is really
     # running.
     def _start_container(self, container):
+      if container is None:
+        return None
       self.logctl.debug("Starting %s" % str(container['Id']))
       try:
         self.container_start(id=container['Id'])
