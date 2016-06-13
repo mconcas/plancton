@@ -137,6 +137,8 @@ class Plancton(Daemon):
           "docker_image"      : "busybox",       # Docker image: repository[:tag]
           "docker_cmd"        : "/bin/sleep 10", # command to run (string or list)
           "docker_privileged" : False,           # give super privileges to the container
+          "max_dock_mem"      : 2000000000,      # maximum RAM memory per container (in bytes)
+          "max_dock_swap"     : 0,               # maximum swap per container (in bytes)
           "binds"             : []               # list of bind mounts (all in read-only)
         }
         self._overhead_tol_counter = 0
@@ -240,6 +242,8 @@ class Plancton(Daemon):
                              "NetworkMode" : "bridge",
                              "SecurityOpt" : ["apparmor:docker-allow-ptrace"] if apparmor_enabled() else [],
                              "Binds"       : [ x+":ro,Z" for x in self._int_st["binds"] ],
+                             "Memory"      : self._int_st["max_dock_mem"],
+                             "MemorySwap"  : self._int_st["max_dock_mem"]+self._int_st["max_dock_swap"],
                              "Privileged"  : self._int_st["docker_privileged"] }
           }
       #"Binds": self._container_bind_list
