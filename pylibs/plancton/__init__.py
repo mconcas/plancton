@@ -90,7 +90,8 @@ class Plancton(Daemon):
     def docker_info(self):
         return self.docker_client.info
     @robust()
-    def image_pull(self, repository, tag):
+    def docker_pull(self, repository, tag="latest"):
+        self.logctl.debug("Pulling: repo %s tag %s" % (repository, tag))
         return self.docker_client.pull(repository=repository, tag=tag)
     @robust()
     def container_create_from_conf(self, jsonconf, name):
@@ -261,21 +262,6 @@ class Plancton(Daemon):
             return True
         except Exception, e:
             self.logctl.error('<...Failed to get docker setup info...>')
-            return False
-
-    def _pull_image(self, repo=None, tagname='latest'):
-        """ Fetch a specified image from a trusted registry. Get image:tag from repo,tagname given args
-            If it finds an utd image simply continue.
-            @return True if the request succeeds, False otherwise.
-        """
-        if not repo:
-            repo, tagname = self._pilot_dock.split(':')
-        try:
-            self.logctl.info('<...Pulling repository:tag %s:%s...>' % (repo, tagname))
-            self.image_pull(repository=repo, tag=tagname)
-            return True
-        except Exception as e:
-            self.logctl.error('<...Can\'t pull container image...> %s', e)
             return False
 
     def _create_container_by_name(self, cname_prefix=''):
@@ -464,9 +450,11 @@ class Plancton(Daemon):
     def init(self):
         self._setup_log_files()
         self._read_conf()
-        sys.exit(42)
+        
         self.logctl.info('---- plancton daemon v%s ----' % self.__version__)
-        self._pull_image()
+        # self._pull_image()
+        self.docker_pull(*self._int_st["docker_image"].split(":", 1))
+        sys.exit(42)
         self._control_containers()
         self._get_setup_info()
         self._do_main_loop = True
