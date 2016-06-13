@@ -78,7 +78,7 @@ elif cmd == 'stop':
 elif cmd == 'status':
     r = daemon_instance.status()
 elif cmd == 'nodaemon':
-    r = daemon_instance.startForeground()
+    r = daemon_instance.run()
 else:
     sys.stderr.write( 'Usage: %s [start|stop|status|nodaemon]\n' % os.path.basename(sys.argv[0]) )
     r = False
