@@ -24,14 +24,14 @@ def pid_exists(pid):
       return False
   return True
 
-def _cpu_count():
-    return int(os.sysconf("SC_NPROCESSORS_ONLN"))
+def cpu_count():
+  return int(os.sysconf("SC_NPROCESSORS_ONLN"))
 
-def _cpu_times():
-    return [ float(x) for x in open('/proc/uptime').read().split(' ') ]
+def cpu_times():
+  return [ float(x) for x in open('/proc/uptime').read().split(' ') ]
 
-def _utc_time():
-    return time.mktime(datetime.utcnow().timetuple())
+def utc_time():
+  return time.mktime(datetime.utcnow().timetuple())
 
 def robust(tries=5, delay=3, backoff=2):
     """ Decorator to catch requests.ConnectionError exceptions, fully customizable, its main aim is to
@@ -112,14 +112,14 @@ class Plancton(Daemon):
         """
         super(Plancton, self).__init__(name, pidfile)
         """ Start time in UTC """
-        self._start_time = self._last_update_time = self._last_confup_time = _utc_time()
+        self._start_time = self._last_update_time = self._last_confup_time = utc_time()
         """ Get cputimes for resource monitoring """
-        self.uptime0,self.idletime0 = _cpu_times()
+        self.uptime0,self.idletime0 = cpu_times()
         self._logdir = logdir
         self._confdir = confdir
         self.sockpath = socket_location
         """ CPU numbers """
-        self._num_cpus = _cpu_count()
+        self._num_cpus = cpu_count()
         """ Hostname """
         self._hostname = socket.gethostname().split('.')[0]
         """ Requests session """
@@ -194,7 +194,7 @@ class Plancton(Daemon):
         self._pilot_entrypoint = conf.get("pilot_entrypoint", "/bin/bash")
         self._pilot_dock = conf.get("pilot_dock", "centos:centos6")
         self._cpus_per_dock = float(conf.get("cpus_per_dock", 1))
-        ncpus = _cpu_count()
+        ncpus = cpu_count()
         self._max_docks = int(eval(str(conf.get("max_docks", "ncpus - 2"))))
         self._cpu_shares = self._cpus_per_dock*1024/ncpus
         privileged_ops = conf.get("pilot_privileged", False)
@@ -250,7 +250,7 @@ class Plancton(Daemon):
             uptime.
             @return zero in case of a negative efficiency.
         """
-        curruptime,curridletime = _cpu_times()
+        curruptime,curridletime = cpu_times()
         deltaup = curruptime - self.uptime0
         deltaidle = curridletime - self.idletime0
         eff = float((deltaup*self._num_cpus - deltaidle)*100) / float(deltaup*self._num_cpus)
@@ -441,7 +441,7 @@ class Plancton(Daemon):
                                 self.logctl.error('<...Couldn\'t get container informations! %s...>', e)
                             else:
                                 statobj = datetime.strptime(insdata['State']['StartedAt'][:19], "%Y-%m-%dT%H:%M:%S")
-                                if (_utc_time() - time.mktime(statobj.timetuple())) > ttl_thresh_secs:
+                                if (utc_time() - time.mktime(statobj.timetuple())) > ttl_thresh_secs:
                                     self.logctl.info('<...Killing %s since it exceeded the ttl_thr...>' % i['Id'])
                                     try:
                                         self.container_remove(id=i['Id'], force=True)
@@ -520,13 +520,13 @@ class Plancton(Daemon):
             @return Nothing
         """
         self._set_cpu_efficiency()
-        whattimeisit = _utc_time()
+        whattimeisit = utc_time()
         delta_1 = whattimeisit - self._last_confup_time
         delta_2 = whattimeisit - self._last_update_time
         self._overhead_control()
         if (delta_1 >= int(self._int_st['daemon']['updateconfig'])):
             self._pull_image()
-            self._last_confup_time = _utc_time()
+            self._last_confup_time = utc_time()
         running = self._count_containers()
         self.logctl.debug('<...CPU efficiency: %.2f%%...>' % self.efficiency)
         self.logctl.debug('<...CPU available:  %.2f%%...>' % self.idle)
@@ -536,7 +536,7 @@ class Plancton(Daemon):
         for i in range(launchable_containers):
            self._deploy_container()
         self._control_containers()
-        self._last_update_time = _utc_time()
+        self._last_update_time = utc_time()
         self._dump_container_list()
 
     def run(self):
