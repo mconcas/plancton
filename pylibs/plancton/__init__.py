@@ -348,7 +348,7 @@ class Plancton(Daemon):
     running = self._count_containers()
     self.logctl.debug('CPU used: %.2f%%, available: %.2f%%' % (self.efficiency, self.idle))
     fitting_docks = int(self.idle*0.95*self._num_cpus/(self.conf["cpus_per_dock"]*100))
-    launchable_containers = min(fitting_docks, int(self.conf["max_docks"]-running))
+    launchable_containers = min(fitting_docks, max(self.conf["max_docks"]-running, 0))
     self.logctl.debug('Potentially fitting containers based on CPU utilisation: %d', fitting_docks)
     if now-self._last_kill_time > self.conf["grace_spawn"]:
       self.logctl.info('Will launch %d new container(s)' % launchable_containers)
