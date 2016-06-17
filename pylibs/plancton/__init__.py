@@ -115,7 +115,7 @@ class Plancton(Daemon):
     self._cont_config = None  # container configuration (dict)
     self._container_prefix = "plancton-slave"
     self.docker_client = Client(base_url=self.sockpath, version='auto')
-    self._int_st = {
+    self.conf = {
       "cputhresh"         : 100,             # percentage of all CPUs allotted to Plancton
       "updateconfig"      : 60,              # frequency of config updates (s)
       "image_expiration"  : 43200,           # frequency of image updates (s)
@@ -163,19 +163,19 @@ class Plancton(Daemon):
     except (IOError, YAMLError) as e:
       self.logctl.error("%s/config.yaml could not be read, using previous one: %s" % (self._confdir, e))
       return
-    for k in self._int_st:
-      self._int_st[k] = conf.get(k, self._int_st[k])
+    for k in self.conf:
+      self.conf[k] = conf.get(k, self.conf[k])
     for k,v in { "soft": 120, "medium": 60, "hard": 30 }.items():
-      if self._int_st["morbidity"] == k:
-          self._int_st["morbidity"] = v
+      if self.conf["morbidity"] == k:
+          self.conf["morbidity"] = v
     for k,v in { "soft": 10, "medium": 5, "hard": 1 }.items():
-      if self._int_st["rigidity"] == k:
-          self._int_st["rigidity"] = v
+      if self.conf["rigidity"] == k:
+          self.conf["rigidity"] = v
     ncpus = cpu_count()
-    self._int_st["max_docks"] = int(eval(str(self._int_st["max_docks"])))
-    if not isinstance(self._int_st["docker_cmd"], list):
-      self._int_st["docker_cmd"] = self._int_st["docker_cmd"].split(" ")
-    self.logctl.debug("Configuration:\n%s" % json.dumps(self._int_st, indent=2))
+    self.conf["max_docks"] = int(eval(str(self.conf["max_docks"])))
+    if not isinstance(self.conf["docker_cmd"], list):
+      self.conf["docker_cmd"] = self.conf["docker_cmd"].split(" ")
+    self.logctl.debug("Configuration:\n%s" % json.dumps(self.conf, indent=2))
 
   # Efficiency is calculated subtracting idletime per cpu from uptime.
   def _set_cpu_efficiency(self):
@@ -189,14 +189,14 @@ class Plancton(Daemon):
 
   # Kill running containers exceeding a given CPU threshold.
   def _overhead_control(self):
-    max_used_cpu = 100 * self._int_st["cpus_per_dock"] * min(self._count_containers(), self._int_st["max_docks"]) / cpu_count()
-    real_cputhresh = max(self._int_st["cputhresh"], max_used_cpu)
+    max_used_cpu = 100 * self.conf["cpus_per_dock"] * min(self._count_containers(), self.conf["max_docks"]) / cpu_count()
+    real_cputhresh = max(self.conf["cputhresh"], max_used_cpu)
     self.logctl.debug("Considering a threshold of %.2f%% of all CPUs", real_cputhresh)
     if self.efficiency > real_cputhresh:
       self._overhead_tol_counter = self._overhead_tol_counter+1
       self.logctl.warning("CPU threshold trespassed for %d consecutive time(s) out of " % \
-                          (self._overhead_tol_counter, self._int_st["rigidity"]))
-      if self._overhead_tol_counter >= self._int_st['rigidity']:
+                          (self._overhead_tol_counter, self.conf["rigidity"]))
+      if self._overhead_tol_counter >= self.conf['rigidity']:
         cont_list = self._filtered_list(name=self._container_prefix)
         if cont_list:
           self.logctl.debug("Attempting to remove container: %s" % cont_list[0]['Id'])
@@ -216,16 +216,16 @@ class Plancton(Daemon):
   def _create_container(self):
     uuid = ''.join(random.SystemRandom().choice(string.digits + string.ascii_lowercase) for _ in range(6))
     cname = self._container_prefix + '-' + uuid
-    c = { "Cmd"        : self._int_st["docker_cmd"],
-          "Image"      : self._int_st["docker_image"],
+    c = { "Cmd"        : self.conf["docker_cmd"],
+          "Image"      : self.conf["docker_image"],
           "Hostname"   : "plancton-%s-%s" % (self._hostname, uuid),
-          "HostConfig" : { "CpuShares"   : self._int_st["cpus_per_dock"]*1024/cpu_count(),
+          "HostConfig" : { "CpuShares"   : self.conf["cpus_per_dock"]*1024/cpu_count(),
                            "NetworkMode" : "bridge",
                            "SecurityOpt" : ["apparmor:docker-allow-ptrace"] if apparmor_enabled() else [],
-                           "Binds"       : [ x+":ro,Z" for x in self._int_st["binds"] ],
-                           "Memory"      : self._int_st["max_dock_mem"],
-                           "MemorySwap"  : self._int_st["max_dock_mem"] + self._int_st["max_dock_swap"],
-                           "Privileged"  : self._int_st["docker_privileged"] }
+                           "Binds"       : [ x+":ro,Z" for x in self.conf["binds"] ],
+                           "Memory"      : self.conf["max_dock_mem"],
+                           "MemorySwap"  : self.conf["max_dock_mem"] + self.conf["max_dock_swap"],
+                           "Privileged"  : self.conf["docker_privileged"] }
         }
     self.logctl.debug("Container definition for %s:\n%s" % (cname, json.dumps(c, indent=2)))
     try:
@@ -304,7 +304,7 @@ class Plancton(Daemon):
           self.logctl.error("Couldn't get container information! %s", e)
         else:
           statobj = datetime.strptime(insdata['State']['StartedAt'][:19], "%Y-%m-%dT%H:%M:%S")
-          if (utc_time() - time.mktime(statobj.timetuple())) > self._int_st["max_ttl"]:
+          if (utc_time() - time.mktime(statobj.timetuple())) > self.conf["max_ttl"]:
             self.logctl.info('Killing %s since it exceeded the max TTL', i['Id'])
             to_remove = True
           else:
@@ -330,7 +330,7 @@ class Plancton(Daemon):
     self.logctl.info('---- plancton daemon v%s ----' % self.__version__)
     self._setup_log_files()
     self._read_conf()
-    self.docker_pull(*self._int_st["docker_image"].split(":", 1))
+    self.docker_pull(*self.conf["docker_image"].split(":", 1))
     self._control_containers()
     self._do_main_loop = True
 
@@ -341,18 +341,18 @@ class Plancton(Daemon):
     delta_config = now - self._last_confup_time
     delta_update = now - self._last_update_time
     self._overhead_control()
-    if delta_update >= int(self._int_st['image_expiration']):
+    if delta_update >= int(self.conf['image_expiration']):
       self._pull_image()
       self._last_update_time = time.time()
-    if delta_config >= int(self._int_st['updateconfig']):
+    if delta_config >= int(self.conf['updateconfig']):
       self._read_conf()
       self._last_confup_time = time.time()
     running = self._count_containers()
     self.logctl.debug('CPU efficiency: %.2f%%' % self.efficiency)
     self.logctl.debug('CPU available:  %.2f%%' % self.idle)
-    fitting_docks = int(self.idle*0.95*self._num_cpus/(self._int_st["cpus_per_dock"]*100))
+    fitting_docks = int(self.idle*0.95*self._num_cpus/(self.conf["cpus_per_dock"]*100))
     self.logctl.debug('Potentially fitting containers based on CPU utilisation: %d', fitting_docks)
-    launchable_containers = min(fitting_docks, int(self._int_st["max_docks"]-running))
+    launchable_containers = min(fitting_docks, int(self.conf["max_docks"]-running))
     self.logctl.info('Will launch %d new container(s)' % launchable_containers)
     for _ in range(launchable_containers):
       self._start_container(self._create_container())
@@ -366,7 +366,7 @@ class Plancton(Daemon):
     while self._do_main_loop:
       count = 0
       self.main_loop()
-      while self._do_main_loop and count < self._int_st["morbidity"]:
+      while self._do_main_loop and count < self.conf["morbidity"]:
         time.sleep(1)
         count = count+1
     self.logctl.info("Exiting gracefully.")
