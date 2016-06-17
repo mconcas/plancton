@@ -118,11 +118,10 @@ class Plancton(Daemon):
     self._container_prefix = "plancton-slave"
     self.docker_client = Client(base_url=self.sockpath, version='auto')
     self.conf = {
-      "cputhresh"         : 100,             # percentage of all CPUs allotted to Plancton
       "updateconfig"      : 60,              # frequency of config updates (s)
       "image_expiration"  : 43200,           # frequency of image updates (s)
       "main_sleep"        : 30,              # main loop sleep (s)
-      "grace_kill"        : 120,             # kill containers after that many s over cputhresh
+      "grace_kill"        : 120,             # kill containers after that many s over CPU threshold
       "grace_spawn"       : 60,              # spawn containers that many seconds after last kill
       "cpus_per_dock"     : 1,               # number of CPUs per container (non-integer)
       "max_docks"         : "ncpus - 2",     # expression to compute max number of containers
@@ -133,7 +132,7 @@ class Plancton(Daemon):
       "max_dock_mem"      : 2000000000,      # maximum RAM memory per container (in bytes)
       "max_dock_swap"     : 0,               # maximum swap per container (in bytes)
       "binds"             : []               # list of bind mounts (all in read-only)
-    }
+  }
 
   # Get only own running containers, youngest container first if reverse=True.
   def _filtered_list(self, name, reverse=True):
@@ -185,14 +184,12 @@ class Plancton(Daemon):
 
   # Kill running containers exceeding a given CPU threshold.
   def _overhead_control(self):
-    max_used_cpu = 100 * self.conf["cpus_per_dock"] * min(self._count_containers(), self.conf["max_docks"]) / cpu_count()
-    real_cputhresh = max(self.conf["cputhresh"], max_used_cpu)
-    self.logctl.debug("Considering a threshold of %.2f%% of all CPUs", real_cputhresh)
-    if self.efficiency > real_cputhresh:
+    max_containers_cpu = 100 * self.conf["cpus_per_dock"] * min(self._count_containers(), self.conf["max_docks"]) / cpu_count()
+    if self.efficiency > max_containers_cpu:
       if self._overhead_first_time == 0:
         self._overhead_first_time = time.time()
       now = time.time()
-      self.logctl.warning("Above CPU threshold of %.2f%% for %d/%d s" % (real_cputhresh, now-self._overhead_first_time, self.conf["grace_kill"]))
+      self.logctl.warning("Above CPU threshold of %.2f%% for %d/%d s" % (max_containers_cpu, now-self._overhead_first_time, self.conf["grace_kill"]))
       if now-self._overhead_first_time > self.conf["grace_kill"]:
         cont_list = self._filtered_list(name=self._container_prefix)
         if cont_list:
