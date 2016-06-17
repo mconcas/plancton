@@ -167,12 +167,6 @@ class Plancton(Daemon):
       return
     for k in self.conf:
       self.conf[k] = conf.get(k, self.conf[k])
-    for k,v in { "soft": 120, "medium": 60, "hard": 30 }.items():
-      if self.conf["main_sleep"] == k:
-          self.conf["main_sleep"] = v
-    for k,v in { "soft": 10, "medium": 5, "hard": 1 }.items():
-      if self.conf["grace_kill"] == k:
-          self.conf["grace_kill"] = v
     ncpus = cpu_count()
     self.conf["max_docks"] = int(eval(str(self.conf["max_docks"])))
     if not isinstance(self.conf["docker_cmd"], list):
