@@ -120,7 +120,7 @@ class Plancton(Daemon):
       "updateconfig"      : 60,              # frequency of config updates (s)
       "image_expiration"  : 43200,           # frequency of image updates (s)
       "morbidity"         : 30,              # main loop sleep (s)
-      "rigidity"          : 10,              # kill containers after that many times over cputhresh
+      "grace_kill"        : 10,              # kill containers after that many times over cputhresh
       "cpus_per_dock"     : 1,               # number of CPUs per container (non-integer)
       "max_docks"         : "ncpus - 2",     # expression to compute max number of containers
       "max_ttl"           : 43200,           # max ttl for a container (default: 12 hours)
@@ -169,8 +169,8 @@ class Plancton(Daemon):
       if self.conf["morbidity"] == k:
           self.conf["morbidity"] = v
     for k,v in { "soft": 10, "medium": 5, "hard": 1 }.items():
-      if self.conf["rigidity"] == k:
-          self.conf["rigidity"] = v
+      if self.conf["grace_kill"] == k:
+          self.conf["grace_kill"] = v
     ncpus = cpu_count()
     self.conf["max_docks"] = int(eval(str(self.conf["max_docks"])))
     if not isinstance(self.conf["docker_cmd"], list):
@@ -195,8 +195,8 @@ class Plancton(Daemon):
     if self.efficiency > real_cputhresh:
       self._overhead_tol_counter = self._overhead_tol_counter+1
       self.logctl.warning("CPU threshold trespassed for %d consecutive time(s) out of " % \
-                          (self._overhead_tol_counter, self.conf["rigidity"]))
-      if self._overhead_tol_counter >= self.conf['rigidity']:
+                          (self._overhead_tol_counter, self.conf["grace_kill"]))
+      if self._overhead_tol_counter >= self.conf['grace_kill']:
         cont_list = self._filtered_list(name=self._container_prefix)
         if cont_list:
           self.logctl.debug("Attempting to remove container: %s" % cont_list[0]['Id'])
