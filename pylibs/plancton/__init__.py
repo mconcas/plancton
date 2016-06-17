@@ -368,6 +368,7 @@ class Plancton(Daemon):
     while self._do_main_loop:
       count = 0
       self.main_loop()
+      self.logctl.debug("Sleeping %d seconds..." % self.conf["morbidity"])
       while self._do_main_loop and count < self.conf["morbidity"]:
         time.sleep(1)
         count = count+1
