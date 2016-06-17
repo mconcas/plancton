@@ -106,6 +106,7 @@ class Plancton(Daemon):
   def __init__(self, name, pidfile, logdir, confdir, socket_location='unix://var/run/docker.sock'):
     super(Plancton, self).__init__(name, pidfile)
     self._start_time = self._last_update_time = self._last_confup_time = time.time()
+    self._last_kill_time = 0
     self._overhead_first_time = 0
     self.uptime0,self.idletime0 = cpu_times()
     self._logdir = logdir
@@ -121,7 +122,8 @@ class Plancton(Daemon):
       "updateconfig"      : 60,              # frequency of config updates (s)
       "image_expiration"  : 43200,           # frequency of image updates (s)
       "main_sleep"        : 30,              # main loop sleep (s)
-      "grace_kill"        : 10,              # kill containers after that many s over cputhresh
+      "grace_kill"        : 120,             # kill containers after that many s over cputhresh
+      "grace_spawn"       : 60,              # spawn containers that many seconds after last kill
       "cpus_per_dock"     : 1,               # number of CPUs per container (non-integer)
       "max_docks"         : "ncpus - 2",     # expression to compute max number of containers
       "max_ttl"           : 43200,           # max ttl for a container (default: 12 hours)
@@ -132,7 +134,6 @@ class Plancton(Daemon):
       "max_dock_swap"     : 0,               # maximum swap per container (in bytes)
       "binds"             : []               # list of bind mounts (all in read-only)
     }
-    self._overhead_tol_counter = 0
 
   # Get only own running containers, youngest container first if reverse=True.
   def _filtered_list(self, name, reverse=True):
@@ -204,6 +205,7 @@ class Plancton(Daemon):
           self.logctl.debug("Killing container %s" % cont_list[0]["Id"])
           try:
             self.container_remove(cont_list[0]['Id'], force=True)
+            self._last_kill_time = time.time()
           except Exception as e:
             self.logctl.error("Cannot remove %s: %s", cont_list[0]["Id"], e)
           else:
@@ -212,7 +214,7 @@ class Plancton(Daemon):
           self.logctl.debug('No workers found, nothing to do')
           self._overhead_first_time = 0
     else:
-      self._overhead_tol_counter = 0
+      self._overhead_first_time = 0
 
   # Create a container. Returns the container ID on success, None otherwise.
   def _create_container(self):
@@ -350,14 +352,16 @@ class Plancton(Daemon):
       self._read_conf()
       self._last_confup_time = time.time()
     running = self._count_containers()
-    self.logctl.debug('CPU efficiency: %.2f%%' % self.efficiency)
-    self.logctl.debug('CPU available:  %.2f%%' % self.idle)
+    self.logctl.debug('CPU used: %.2f%%, available: %.2f%%' % (self.efficiency, self.idle))
     fitting_docks = int(self.idle*0.95*self._num_cpus/(self.conf["cpus_per_dock"]*100))
-    self.logctl.debug('Potentially fitting containers based on CPU utilisation: %d', fitting_docks)
     launchable_containers = min(fitting_docks, int(self.conf["max_docks"]-running))
-    self.logctl.info('Will launch %d new container(s)' % launchable_containers)
-    for _ in range(launchable_containers):
-      self._start_container(self._create_container())
+    self.logctl.debug('Potentially fitting containers based on CPU utilisation: %d', fitting_docks)
+    if now-self._last_kill_time > self.conf["grace_spawn"]:
+      self.logctl.info('Will launch %d new container(s)' % launchable_containers)
+      for _ in range(launchable_containers):
+        self._start_container(self._create_container())
+    elif launchable_containers > 0:
+      self.logctl.info("Not launching %d containers: too little time elapsed after last kill" % launchable_containers)
     self._control_containers()
     self._last_update_time = time.time()
     self._dump_container_list()
