@@ -106,6 +106,7 @@ class Plancton(Daemon):
   def __init__(self, name, pidfile, logdir, confdir, socket_location='unix://var/run/docker.sock'):
     super(Plancton, self).__init__(name, pidfile)
     self._start_time = self._last_update_time = self._last_confup_time = time.time()
+    self._overhead_first_time = 0
     self.uptime0,self.idletime0 = cpu_times()
     self._logdir = logdir
     self._confdir = confdir
@@ -120,7 +121,7 @@ class Plancton(Daemon):
       "updateconfig"      : 60,              # frequency of config updates (s)
       "image_expiration"  : 43200,           # frequency of image updates (s)
       "morbidity"         : 30,              # main loop sleep (s)
-      "grace_kill"        : 10,              # kill containers after that many times over cputhresh
+      "grace_kill"        : 10,              # kill containers after that many s over cputhresh
       "cpus_per_dock"     : 1,               # number of CPUs per container (non-integer)
       "max_docks"         : "ncpus - 2",     # expression to compute max number of containers
       "max_ttl"           : 43200,           # max ttl for a container (default: 12 hours)
@@ -193,13 +194,14 @@ class Plancton(Daemon):
     real_cputhresh = max(self.conf["cputhresh"], max_used_cpu)
     self.logctl.debug("Considering a threshold of %.2f%% of all CPUs", real_cputhresh)
     if self.efficiency > real_cputhresh:
-      self._overhead_tol_counter = self._overhead_tol_counter+1
-      self.logctl.warning("CPU threshold trespassed for %d consecutive time(s) out of " % \
-                          (self._overhead_tol_counter, self.conf["grace_kill"]))
-      if self._overhead_tol_counter >= self.conf['grace_kill']:
+      if self._overhead_first_time == 0:
+        self._overhead_first_time = time.time()
+      now = time.time()
+      self.logctl.warning("Above CPU threshold of %.2f%% for %d/%d s" % (real_cputhresh, now-self._overhead_first_time, self.conf["grace_kill"]))
+      if now-self._overhead_first_time > self.conf["grace_kill"]:
         cont_list = self._filtered_list(name=self._container_prefix)
         if cont_list:
-          self.logctl.debug("Attempting to remove container: %s" % cont_list[0]['Id'])
+          self.logctl.debug("Killing container %s" % cont_list[0]["Id"])
           try:
             self.container_remove(cont_list[0]['Id'], force=True)
           except Exception as e:
@@ -208,7 +210,7 @@ class Plancton(Daemon):
             self.logctl.info('Container %s removed successfully' % cont_list[0]['Id'])
         else:
           self.logctl.debug('No workers found, nothing to do')
-          self._overhead_tol_counter = 0
+          self._overhead_first_time = 0
     else:
       self._overhead_tol_counter = 0
 
