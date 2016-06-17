@@ -120,7 +120,7 @@ class Plancton(Daemon):
       "cputhresh"         : 100,             # percentage of all CPUs allotted to Plancton
       "updateconfig"      : 60,              # frequency of config updates (s)
       "image_expiration"  : 43200,           # frequency of image updates (s)
-      "morbidity"         : 30,              # main loop sleep (s)
+      "main_sleep"        : 30,              # main loop sleep (s)
       "grace_kill"        : 10,              # kill containers after that many s over cputhresh
       "cpus_per_dock"     : 1,               # number of CPUs per container (non-integer)
       "max_docks"         : "ncpus - 2",     # expression to compute max number of containers
@@ -167,8 +167,8 @@ class Plancton(Daemon):
     for k in self.conf:
       self.conf[k] = conf.get(k, self.conf[k])
     for k,v in { "soft": 120, "medium": 60, "hard": 30 }.items():
-      if self.conf["morbidity"] == k:
-          self.conf["morbidity"] = v
+      if self.conf["main_sleep"] == k:
+          self.conf["main_sleep"] = v
     for k,v in { "soft": 10, "medium": 5, "hard": 1 }.items():
       if self.conf["grace_kill"] == k:
           self.conf["grace_kill"] = v
@@ -368,8 +368,8 @@ class Plancton(Daemon):
     while self._do_main_loop:
       count = 0
       self.main_loop()
-      self.logctl.debug("Sleeping %d seconds..." % self.conf["morbidity"])
-      while self._do_main_loop and count < self.conf["morbidity"]:
+      self.logctl.debug("Sleeping %d seconds..." % self.conf["main_sleep"])
+      while self._do_main_loop and count < self.conf["main_sleep"]:
         time.sleep(1)
         count = count+1
     self.logctl.info("Exiting gracefully.")
