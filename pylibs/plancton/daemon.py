@@ -9,7 +9,7 @@ import atexit
 import logging, logging.handlers
 import os
 import signal
-import sys 
+import sys
 import time
 
 
@@ -75,7 +75,7 @@ class Daemon(object):
             os.remove(self.pidFile)
 
     def isRunning(self):
-        """ Send 0 signal and check whether a process with that 
+        """ Send 0 signal and check whether a process with that
             given pd is running.
         """
         if self.pid is None:
@@ -180,7 +180,7 @@ class Daemon(object):
             return False
 
     def stop(self):
-        """ Stop the daemon.        
+        """ Stop the daemon.
             An attempt to kill the daemon is performed for 30 seconds sending **signal 15 (SIGTERM)**: if
             the daemon is implemented properly, it will perform its shutdown operations and it will exit
             gracefully.
@@ -189,7 +189,7 @@ class Daemon(object):
             Note that this attempt might fail as well.
             @return True on success, where "success" means that the final status is that the daemon is not
             running: an example of success is when the daemon wasn't running and `stop()` is
-            called. False is returned otherwise.    
+            called. False is returned otherwise.
         """
 
         self.logctl.info('stopping, this may take a while...')
@@ -218,7 +218,7 @@ class Daemon(object):
         if self.isRunning():
             self.logctl.error('could not terminate')
             return False
-            
+
         # It's likely this will never be printed.
         self.logctl.warning('force-killed')
         return True
@@ -235,7 +235,7 @@ class Daemon(object):
         pass
 
     def exitHandlerReal(self, signum, frame):
-        """ Real exit handler.     
+        """ Real exit handler.
             Calls the `onexit()` function, that must be overridden by subclasses, and exits the program
             if it returns True. Exit signals are temporarily mapped to noop while handling one signal,
             and the mapping is restored in case exiting is cancelled.
