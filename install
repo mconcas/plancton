@@ -2,7 +2,7 @@
 export Daemondir="/opt/plancton"
 export Rundir="$Daemondir/git/run"
 export Daemonuser="plancton"
-export Configrepo="https://github.com/mconcas/voluntary-config"
+export Configrepo="https://github.com/mconcas/plancton-conf"
 
 MANUAL_DOCKER_ENABLE=no
 MANUAL_DOCKER_START=no
