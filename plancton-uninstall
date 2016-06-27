@@ -5,12 +5,12 @@ export Daemonuser="plancton"
 
 echo "<< Welcome to \"Plancton, an opportunistic computing project\" uninstallation procedure >>"
 
-echo "Killing daemon..."
+echo "Killing daemon"
 [[ -f $Daemondir/.plancton/plancton.pid ]] && kill $(cat $Daemondir/.plancton/plancton.pid)
 rm -Rf $Daemondir
 
-echo "Removing cronjobs to plancton's crontab..."
+echo "Removing cronjobs to plancton's crontab"
 rm -Rf /var/spool/cron/plancton
 
-echo "Deleting $Daemonuser ..."
+echo "Deleting $Daemonuser user"
 userdel $Daemonuser

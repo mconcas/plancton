@@ -75,7 +75,7 @@ def robust(tries=5, delay=3, backoff=2):
   return robust_decorator
 
 class Plancton(Daemon):
-  __version__ = '0.4.0'
+  __version__ = '0.4.1'
   @robust()
   def container_list(self, all=True):
     return self.docker_client.containers(all=all)
@@ -214,7 +214,7 @@ class Plancton(Daemon):
     c = { "Cmd"        : self.conf["docker_cmd"],
           "Image"      : self.conf["docker_image"],
           "Hostname"   : "plancton-%s-%s" % (self._hostname, uuid),
-          "HostConfig" : { "CpuShares"   : self.conf["cpus_per_dock"]*1024/cpu_count(),
+          "HostConfig" : { "CpuShares"   : int(self.conf["cpus_per_dock"]*1024/cpu_count()),
                            "NetworkMode" : "bridge",
                            "SecurityOpt" : ["apparmor:docker-allow-ptrace"] if apparmor_enabled() else [],
                            "Binds"       : [ x+":ro,Z" for x in self.conf["binds"] ],
