@@ -8,7 +8,7 @@ language: python
 install: |
   set -x
   git rev-parse HEAD
-  sudo -E bash -x ./install to-infn/dev || true
+  sudo -E bash -x ./plancton-bootstrap to-infn/dev || true
 
 script: |
   set -ex
