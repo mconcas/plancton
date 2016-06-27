@@ -1,0 +1,128 @@
+#! /bin/bash
+export Daemondir="/opt/plancton"
+export Rundir="$Daemondir/git/run"
+export Daemonuser="plancton"
+export Configrepo="https://github.com/mconcas/plancton-conf"
+
+MANUAL_DOCKER_ENABLE=no
+MANUAL_DOCKER_START=no
+MANUAL_DOCKER_INSTALL=no
+
+function welcome() {
+   echo
+   echo "<< Welcome to \"Plancton, an opportunistic computing project\" installation procedure >>"
+   echo
+}
+
+function testcmd() {
+   command -v "$@" > /dev/null 2>&1
+}
+
+function testreq() {
+   echo "Testing requisites..."
+   for i in "$@"; do
+      if ! testcmd "$i"; then
+         echo -e "\e[1;91m !! $i is MISSING !! \e[0;0m"
+         exit 1
+      else
+         echo -e "\e[1;32m !! $i FOUND !! \e[0;0m"
+      fi
+   done
+}
+
+function main() {
+   conf_branch="$1"
+   if [[ "$conf_branch" == '' ]]; then
+      echo -e "\e[1;91mPlease specify the configuration branch to use.\e[m"
+      echo -e "\e[1;91m Examples:\e[m"
+      echo -e "\e[1;91m\t* to-infn/dev\e[m"
+      echo -e "\e[1;91m\t* cern-openstack/dev\e[m"
+      
+      exit 1
+   fi
+   
+   [[ $(id -u) != "0" ]] && echo -e "\e[1;91m [ERROR] this script needs to be run as root.\e[m" && exit 1;
+
+   welcome
+   testreq git pip
+   if ! testcmd docker; then
+      echo "docker-engine not found, trying to install it automatically..."
+      if ! (curl -sSL https://get.docker.com/ | sh); then
+         echo "[Failed] You have to install docker-engine manually to continue."
+         MANUAL_DOCKER_INSTALL=yes
+         exit 1
+      fi
+   fi
+   echo "restarting docker daemon..."
+   service docker stop > /dev/null 2>&1
+   if ! service docker start; then
+      echo "couldn't, please start/restart it manually..."
+      MANUAL_DOCKER_START=yes
+   fi
+
+   (
+      set -e
+      echo "enabling docker daemon..."
+      systemctl enable docker > /dev/null 2>&1 ||                          # CentOS7 & Fedora > 21
+      (chkconfig docker --add && chkconfig docker on) > /dev/null 2>&1 ||  # Fedora < 21 & SuSE (lol)
+      update-rc.d docker defaults > /dev/null 2>&1 ||                      # Ubuntu &  Debian
+      rc-update add docker default > /dev/null 2>&1 ||                     # Gentoo (lol)
+      ( echo "couldn't, please enable it manually..." && MANUAL_DOCKER_ENABLE=yes )
+      echo "adding group docker..."
+      (getent group docker || groupadd docker) > /dev/null 2>&1
+      echo "adding $Daemonuser..."
+      id $Daemonuser > /dev/null 2>&1 || useradd -d $Daemondir -g docker $Daemonuser > /dev/null 2>&1
+      echo "installing docker-py if not present..."
+      (python -c "import docker" || pip install docker-py) > /dev/null 2>&1
+      echo "installing pyyaml if not present..."
+      (python -c "import yaml" || pip install pyyaml) > /dev/null 2>&1
+      echo "installing prettytable if not present..."
+      (python -c "import prettytable" || pip install prettytable) > /dev/null 2>&1
+      echo "adding cronjobs to plancton's crontab..."
+      echo "@reboot /opt/plancton/git/run/plancton-start > /tmp/cron-plancton.log" >> /tmp/tempcron
+      echo "@daily /opt/plancton/git/run/plancton-start > /tmp/cron-plancton.log" >> /tmp/tempcron
+      crontab -u $Daemonuser /tmp/tempcron
+      rm /tmp/tempcron; mkdir -p $Daemondir
+      chown -R $Daemonuser $Daemondir
+      if [[ "$MANUAL_DOCKER_INSTALL" == "yes" ]]; then
+         echo -e " \e[1;91m * Please install docker manually\e[m"
+         false
+      elif [[ "$MANUAL_DOCKER_START" == "yes" ]]; then
+         echo -e " \e[1;91m * Please start/restart docker manually\e[m"
+      elif [[ "$MANUAL_DOCKER_ENABLE" == "yes" ]]; then
+         echo -e " \e[1;33m * Please enable docker manually.\e[m"
+      fi
+   )
+   if [[ $? != 0 ]]; then
+     echo -e "\e[1;91mlast step has failed\e[m"
+     exit 1
+   fi
+
+   echo "cloning Plancton into: $Daemondir/git/ ..."
+   cd /
+   if [[ ! -d $Daemondir/git/.git ]]; then
+     [[ -d "$TRAVIS_BUILD_DIR/.git" ]] \
+       && { rsync -av --delete $TRAVIS_BUILD_DIR/ $Daemondir/git && chown -R $Daemonuser $Daemondir/git; } \
+       || su $Daemonuser -c "git clone https://github.com/mconcas/plancton $Daemondir/git"
+   fi
+
+   echo "cloning Plancton configuration repository: $conf_branch ..."
+   su $Daemonuser -c "mkdir -p $Daemondir/.plancton"
+   [[ ! -d $Daemondir/.plancton/conf/.git ]] && su $Daemonuser -c "git clone -b $conf_branch $Configrepo $Daemondir/.plancton/conf"
+   echo "Parsing apparmor profile..."
+   set +e
+   apparmor_parser -r $Daemondir/.plancton/conf/docker-allow-ptrace
+   set -e
+   (
+   echo "Applying eventual further docker configurations..."
+   set +e
+   [[ -f $Daemondir/.plancton/conf/docker-config.sh ]] && source $Daemondir/.plancton/conf/docker-config.sh
+   set -e
+   echo "done."
+   )
+   echo "running Plancton start script ..."
+   su $Daemonuser -c $Daemondir/git/run/plancton-start
+}
+
+# Entry point
+main "$1"

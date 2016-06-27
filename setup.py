@@ -26,7 +26,7 @@ setup(
         'Development Status :: 3 - Alpha',
 
         # Indicate who your project is intended for
-        'Intended Audience :: Sysadmins',
+        'Intended Audience :: System Administrators',
         'Topic :: Scientific/Engineering :: Physics',
         
 	# Pick your license as you wish (should match "license" above)
@@ -79,6 +79,6 @@ setup(
     # pip to create the appropriate form of executable for the target platform.
     # entry_points={
     # },
-    scripts = ["bin/planctonctl","install", "uninstall", "run/planctonpath.sh", "run/plancton-start", "run/plancton-status", "run/plancton-stop"]
+    scripts = ["plancton-bootstrap", "plancton-uninstall", "run/plancton-start", "run/plancton-status", "run/plancton-stop"]
 
 )
