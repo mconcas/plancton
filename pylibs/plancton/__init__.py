@@ -131,7 +131,9 @@ class Plancton(Daemon):
       "docker_privileged" : False,           # give super privileges to the container
       "max_dock_mem"      : 2000000000,      # maximum RAM memory per container (in bytes)
       "max_dock_swap"     : 0,               # maximum swap per container (in bytes)
-      "binds"             : []               # list of bind mounts (all in read-only)
+      "binds"             : [],              # list of bind mounts (all in read-only)
+      "devices"           : [],              # list of exposed devices (keep the original permissions)
+      "capabilities"      : []               # list of added capabilities (e.g. SYS_ADMIN)
   }
 
   # Get only own running containers, youngest container first if reverse=True.
@@ -220,7 +222,10 @@ class Plancton(Daemon):
                            "Binds"       : [ x+":ro,Z" for x in self.conf["binds"] ],
                            "Memory"      : self.conf["max_dock_mem"],
                            "MemorySwap"  : self.conf["max_dock_mem"] + self.conf["max_dock_swap"],
-                           "Privileged"  : self.conf["docker_privileged"] }
+                           "Privileged"  : self.conf["docker_privileged"],
+                           "Devices"     : self.conf["devices"],
+                           "CapAdd"      : self.conf["capabilities"]
+                         }
         }
     self.logctl.debug("Container definition for %s:\n%s" % (cname, json.dumps(c, indent=2)))
     try:
