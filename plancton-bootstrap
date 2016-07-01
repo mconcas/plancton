@@ -37,10 +37,10 @@ function main() {
       echo -e "\e[1;91m Examples:\e[m"
       echo -e "\e[1;91m\t* to-infn/dev\e[m"
       echo -e "\e[1;91m\t* cern-openstack/dev\e[m"
-      
+
       exit 1
    fi
-   
+
    [[ $(id -u) != "0" ]] && echo -e "\e[1;91m [ERROR] this script needs to be run as root.\e[m" && exit 1;
 
    welcome
@@ -111,7 +111,7 @@ function main() {
    [[ ! -d $Daemondir/.plancton/conf/.git ]] && su $Daemonuser -c "git clone -b $conf_branch $Configrepo $Daemondir/.plancton/conf"
    echo "Parsing apparmor profile..."
    set +e
-   apparmor_parser -r $Daemondir/.plancton/conf/docker-allow-ptrace
+   apparmor_parser -r $Daemondir/.plancton/conf/docker-cvmfs
    set -e
    (
    echo "Applying eventual further docker configurations..."
