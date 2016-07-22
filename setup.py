@@ -10,7 +10,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 
 setup(
   name='plancton',
-  version='0.4.1',
+  version='0.4.3',
   description='An opportunistic distributed computing project based on Docker',
   long_description=long_description,
   url='https://github.com/mconcas/plancton',
@@ -79,5 +79,5 @@ setup(
   # pip to create the appropriate form of executable for the target platform.
   # entry_points={
   # },
-  scripts = ["plancton-bootstrap", "plancton-uninstall", "run/plancton-start", "run/plancton-status", "run/plancton-stop"]
+  scripts = ["bin/plancton-bootstrap", "bin/planctonctl"]
 )

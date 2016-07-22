@@ -75,7 +75,7 @@ def robust(tries=5, delay=3, backoff=2):
   return robust_decorator
 
 class Plancton(Daemon):
-  __version__ = '0.4.1'
+  __version__ = '0.4.3'
   @robust()
   def container_list(self, all=True):
     return self.docker_client.containers(all=all)
