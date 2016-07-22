@@ -132,7 +132,7 @@ class Plancton(Daemon):
       "max_dock_mem"      : 2000000000,      # maximum RAM memory per container (in bytes)
       "max_dock_swap"     : 0,               # maximum swap per container (in bytes)
       "binds"             : [],              # list of bind mounts (all in read-only)
-      "devices"           : [],              # list of exposed devices (keep original permissions)
+      "devices"           : [],              # list of exposed devices
       "capabilities"      : [],              # list of added capabilities (e.g. SYS_ADMIN)
       "security_opts"     : []               # list of security options (e.g. apparmor profile)
   }
@@ -224,7 +224,9 @@ class Plancton(Daemon):
                            "Memory"      : self.conf["max_dock_mem"],
                            "MemorySwap"  : self.conf["max_dock_mem"] + self.conf["max_dock_swap"],
                            "Privileged"  : self.conf["docker_privileged"],
-                           "Devices"     : self.conf["devices"],
+                           "Devices"     : [ dict(zip([ "PathOnHost", "PathInContainer",
+                                                        "CgroupPermissions" ], x.split(":", 2)))
+                                             for x in self.conf["devices"] ],
                            "CapAdd"      : self.conf["capabilities"]
                          }
         }
