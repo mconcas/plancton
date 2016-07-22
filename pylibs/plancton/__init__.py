@@ -132,8 +132,9 @@ class Plancton(Daemon):
       "max_dock_mem"      : 2000000000,      # maximum RAM memory per container (in bytes)
       "max_dock_swap"     : 0,               # maximum swap per container (in bytes)
       "binds"             : [],              # list of bind mounts (all in read-only)
-      "devices"           : [],              # list of exposed devices (keep the original permissions)
-      "capabilities"      : []               # list of added capabilities (e.g. SYS_ADMIN)
+      "devices"           : [],              # list of exposed devices (keep original permissions)
+      "capabilities"      : [],              # list of added capabilities (e.g. SYS_ADMIN)
+      "security_opts"     : []               # list of security options (e.g. apparmor profile)
   }
 
   # Get only own running containers, youngest container first if reverse=True.
@@ -218,7 +219,7 @@ class Plancton(Daemon):
           "Hostname"   : "plancton-%s-%s" % (self._hostname, uuid),
           "HostConfig" : { "CpuShares"   : int(self.conf["cpus_per_dock"]*1024/cpu_count()),
                            "NetworkMode" : "bridge",
-                           "SecurityOpt" : ["apparmor:docker-allow-ptrace"] if apparmor_enabled() else [],
+                           "SecurityOpt" : self.conf["security_opts"] if apparmor_enabled() else [],
                            "Binds"       : [ x+":ro,Z" for x in self.conf["binds"] ],
                            "Memory"      : self.conf["max_dock_mem"],
                            "MemorySwap"  : self.conf["max_dock_mem"] + self.conf["max_dock_swap"],
