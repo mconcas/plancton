@@ -188,7 +188,7 @@ class Plancton(Daemon):
   # Kill running containers exceeding a given CPU threshold.
   def _overhead_control(self):
     max_containers_cpu = 100 * self.conf["cpus_per_dock"] * min(self._count_containers(), self.conf["max_docks"]) / cpu_count()
-    if max_containers_cpu and self.efficiency > max_containers_cpu:
+    if max_containers_cpu and self.efficiency > max_containers_cpu+10.:
       if self._overhead_first_time == 0:
         self._overhead_first_time = time.time()
       now = time.time()
