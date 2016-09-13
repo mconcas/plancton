@@ -1,0 +1,46 @@
+#!/bin/bash -e
+
+set -o pipefail
+
+function fatal() {
+  printf "\033[1;4;31mFATAL\033[m\033[31m: $1\033[m\n"
+}
+
+function success() {
+  printf "\033[32m$1\033[m\n"
+}
+
+[[ $(whoami) == root ]] || { fatal "You must run this script as root"; exit 1; }
+
+planctonctl help &> /dev/null || {
+  fatal "Cannot find planctonctl, check your installation"
+  exit 1
+}
+
+git --help &> /dev/null || { fatal "git not found, please install it."; exit 1; }
+docker --help &> /dev/null || {
+  fatal "docker not found: install it as root with: curl -sSL https://get.docker.com/ | sh"
+  exit 1
+}
+
+[[ $1 ]] || {
+  fatal "Specify a configuration on GitHub in the form user/repo[:branch]."
+  fatal "For instance: $0 mconcas/plancton-conf:to-infn/dev"
+  exit 1
+}
+
+GH_BRANCH=${1##*:}
+GH_REPO=${1%:*}
+[[ $1 == $GH_BRANCH ]] && GH_BRANCH=
+
+[[ ! -d /etc/plancton/.git ]] || {
+  fatal "Another configuration found under /etc/plancton, remove it first"
+  exit 1
+}
+rm -rf /etc/plancton
+git -c core.askpass=true clone https://github.com/$GH_REPO ${GH_BRANCH:+-b $GH_BRANCH} /etc/plancton
+
+PLANCTON=$(type -p planctonctl | sed -e 's/^planctonctl is //g')
+( crontab -l | grep -v planctonctl || true ; echo "@reboot $PLANCTON > /dev/null 2> /dev/null" ) | crontab -
+
+success "Plancton installed. It will start automatically at next boot. Start it now with: planctonctl start"

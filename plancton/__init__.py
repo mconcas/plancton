@@ -75,7 +75,7 @@ def robust(tries=5, delay=3, backoff=2):
   return robust_decorator
 
 class Plancton(Daemon):
-  __version__ = '0.4.1'
+  __version__ = '0.4.3'
   @robust()
   def container_list(self, all=True):
     return self.docker_client.containers(all=all)
@@ -131,7 +131,10 @@ class Plancton(Daemon):
       "docker_privileged" : False,           # give super privileges to the container
       "max_dock_mem"      : 2000000000,      # maximum RAM memory per container (in bytes)
       "max_dock_swap"     : 0,               # maximum swap per container (in bytes)
-      "binds"             : []               # list of bind mounts (all in read-only)
+      "binds"             : [],              # list of bind mounts (all in read-only)
+      "devices"           : [],              # list of exposed devices
+      "capabilities"      : [],              # list of added capabilities (e.g. SYS_ADMIN)
+      "security_opts"     : []               # list of security options (e.g. apparmor profile)
   }
 
   # Get only own running containers, youngest container first if reverse=True.
@@ -184,8 +187,8 @@ class Plancton(Daemon):
 
   # Kill running containers exceeding a given CPU threshold.
   def _overhead_control(self):
-    max_containers_cpu = 100 * self.conf["cpus_per_dock"] * min(max(self._count_containers(), 1), self.conf["max_docks"]) / cpu_count()
-    if self.efficiency > max_containers_cpu:
+    max_containers_cpu = 100 * self.conf["cpus_per_dock"] * min(self._count_containers(), self.conf["max_docks"]) / cpu_count()
+    if max_containers_cpu and self.efficiency > max_containers_cpu+10.:
       if self._overhead_first_time == 0:
         self._overhead_first_time = time.time()
       now = time.time()
@@ -216,11 +219,16 @@ class Plancton(Daemon):
           "Hostname"   : "plancton-%s-%s" % (self._hostname, uuid),
           "HostConfig" : { "CpuShares"   : int(self.conf["cpus_per_dock"]*1024/cpu_count()),
                            "NetworkMode" : "bridge",
-                           "SecurityOpt" : ["apparmor:docker-allow-ptrace"] if apparmor_enabled() else [],
+                           "SecurityOpt" : self.conf["security_opts"] if apparmor_enabled() else [],
                            "Binds"       : [ x+":ro,Z" for x in self.conf["binds"] ],
                            "Memory"      : self.conf["max_dock_mem"],
                            "MemorySwap"  : self.conf["max_dock_mem"] + self.conf["max_dock_swap"],
-                           "Privileged"  : self.conf["docker_privileged"] }
+                           "Privileged"  : self.conf["docker_privileged"],
+                           "Devices"     : [ dict(zip([ "PathOnHost", "PathInContainer",
+                                                        "CgroupPermissions" ], x.split(":", 2)))
+                                             for x in self.conf["devices"] ],
+                           "CapAdd"      : self.conf["capabilities"]
+                         }
         }
     self.logctl.debug("Container definition for %s:\n%s" % (cname, json.dumps(c, indent=2)))
     try:

@@ -1,6 +1,6 @@
-sudo: requires 
+sudo: requires
 
-services: 
+services:
  - docker
 
 language: python
@@ -8,15 +8,17 @@ language: python
 install: |
   set -x
   git rev-parse HEAD
-  sudo -E bash -x ./plancton-bootstrap to-infn/dev || true
+  sudo pip install -e .
+  sudo plancton-bootstrap mconcas/plancton-conf:cern-test
+  sudo planctonctl start
 
 script: |
   set -ex
-  PREFIX=/opt/plancton/.plancton
+  PIDFILE=/var/run/plancton.pid
   dielog() {
-    sudo cat $PREFIX/log/plancton.log
-    exit 1
+    sudo cat /var/log/plancton/plancton.log
+    return 1
   }
-  ls -lR $PREFIX || true
-  sudo test -f $PREFIX/plancton.pid || dielog
-  sudo kill -0 $(sudo cat $PREFIX/plancton.pid) || dielog
+  ls -l $PIDFILE || true
+  sudo test -f $PIDFILE || dielog
+  sudo kill -0 $(sudo cat $PIDFILE) || dielog
