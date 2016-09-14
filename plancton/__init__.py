@@ -154,7 +154,7 @@ class Plancton(Daemon):
     format = '%(asctime)s %(name)s %(levelname)s [%(module)s.%(funcName)s] %(message)s'
     datefmt = '%Y-%m-%d %H:%M:%S'
     log_file_handler = logging.handlers.RotatingFileHandler(self._logdir + '/plancton.log',
-      mode='a', maxBytes=1000000, backupCount=5)
+      mode='a', maxBytes=10000000, backupCount=50)
     log_file_handler.setFormatter(logging.Formatter(format, datefmt))
     log_file_handler.doRollover()
     self.logctl.setLevel(10)
