@@ -41,6 +41,6 @@ rm -rf /etc/plancton
 git -c core.askpass=true clone https://github.com/$GH_REPO ${GH_BRANCH:+-b $GH_BRANCH} /etc/plancton
 
 PLANCTON=$(type -p planctonctl | sed -e 's/^planctonctl is //g')
-( crontab -l | grep -v planctonctl || true ; echo "@reboot $PLANCTON > /dev/null 2> /dev/null" ) | crontab -
+( crontab -l | grep -v planctonctl || true ; echo "@reboot $PLANCTON start > /dev/null 2> /dev/null" ) | crontab -
 
 success "Plancton installed. It will start automatically at next boot. Start it now with: planctonctl start"

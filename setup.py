@@ -10,7 +10,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 
 setup(
   name='plancton',
-  version='0.4.3',
+  version='0.4.5',
   description='An opportunistic distributed computing project based on Docker',
   long_description=long_description,
   url='https://github.com/mconcas/plancton',
