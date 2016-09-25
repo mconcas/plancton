@@ -216,7 +216,7 @@ class Plancton(Daemon):
     cname = self._container_prefix + '-' + uuid
     c = { "Cmd"        : self.conf["docker_cmd"],
           "Image"      : self.conf["docker_image"],
-          "Hostname"   : "plancton-%s-%s" % (self._hostname, uuid),
+          "Hostname"   : "plancton-%s-%s" % (self._hostname[:40], uuid),
           "HostConfig" : { "CpuQuota"    : int(self.conf["cpus_per_dock"]*100000.),
                            "CpuPeriod"   : 100000,
                            "NetworkMode" : "bridge",
