@@ -270,7 +270,7 @@ class Plancton(Daemon):
       self.logctl.error("Couldn't get container list: %s", e)
     num = 0
     for c in clist:
-      if c['Names'][0][1:].startswith(self._container_prefix):
+      if c.get("Names", [""])[0][1:].startswith(self._container_prefix):
         num = num+1
         shortid = c['Id'][:12]
         status = c['Status'].lower()
@@ -287,7 +287,8 @@ class Plancton(Daemon):
     except Exception as e:
       self.logctl.error("Couldn't get containers list, defaulting running value to zero: %s", e)
       return 0
-    return len([ x for x in clist if x["Status"].startswith("Up") ])
+    return len([ x for x in clist if x["Status"].startswith("Up")
+                   and x.get("Names", [""])[0][1:].startswith(self._container_prefix) ])
 
   # Clean up dead or stale containers.
   def _control_containers(self):
@@ -297,8 +298,8 @@ class Plancton(Daemon):
       self.logctl.error("Couldn't get containers list: %s", e)
       return
     for i in clist:
-      if not i['Names'][0][1:].startswith(self._container_prefix):
-        self.logctl.debug("Ignoring container %s", i["Names"][0])
+      if not i.get("Names", [""])[0][1:].startswith(self._container_prefix):
+        self.logctl.debug("Ignoring container %s", i.get("Names", [""])[0][1:])
         continue
       to_remove = False
       # TTL threshold block
