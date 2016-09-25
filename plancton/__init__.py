@@ -261,7 +261,8 @@ class Plancton(Daemon):
 
   # Pretty print the statuses of controlled containers.
   def _dump_container_list(self):
-    status_table = PrettyTable(['n\'', 'docker hash', 'status', 'docker name', 'pid'])
+    status_table = PrettyTable(['n\'', 'docker hash', 'status', 'docker name', '   pid   '])
+    status_table.align["   pid   "] = "r"
     try:
       clist = self.container_list(all=True)
     except Exception as e:
@@ -271,10 +272,10 @@ class Plancton(Daemon):
       if c['Names'][0][1:].startswith(self._container_prefix):
         num = num+1
         shortid = c['Id'][:12]
-        status = " active " if c['Status'].startswith("Up") else "inactive"
+        status = c['Status'].lower()
         name = c['Names'][0][1:]
         pid = self.container_inspect(id=c['Id'])['State'].get('Pid', 0)
-        pid = " --- " if pid == 0 else str(pid)
+        pid = "" if pid == 0 else str(pid)
         status_table.add_row([num, shortid, status, name, pid])
     self.logctl.info('Container list:\n' + str(status_table))
 
