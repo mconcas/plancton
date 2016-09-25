@@ -346,12 +346,13 @@ class Plancton(Daemon):
     delta_config = now - self._last_confup_time
     delta_update = now - self._last_update_time
     self._overhead_control()
-    if delta_update >= int(self.conf['image_expiration']):
-      self._pull_image()
-      self._last_update_time = time.time()
+    prev_img = self.conf["docker_image"]
     if delta_config >= int(self.conf['updateconfig']):
       self._read_conf()
       self._last_confup_time = time.time()
+    if prev_img != self.conf["docker_image"] or delta_update >= int(self.conf['image_expiration']):
+      self.docker_pull(*self.conf["docker_image"].split(":", 1))
+      self._last_update_time = time.time()
     running = self._count_containers()
     self.logctl.debug('CPU used: %.2f%%, available: %.2f%%' % (self.efficiency, self.idle))
     fitting_docks = int(self.idle*0.95*self._num_cpus/(self.conf["cpus_per_dock"]*100))
