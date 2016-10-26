@@ -167,6 +167,8 @@ class Plancton(Daemon):
     except (IOError, YAMLError) as e:
       self.logctl.error("%s/config.yaml could not be read, using previous one: %s" % (self._confdir, e))
       conf = {}
+    if conf is None:
+      conf = {}
     for k in self.conf:
       self.conf[k] = conf.get(k, self.conf[k])
     ncpus = cpu_count()
