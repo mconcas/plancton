@@ -127,7 +127,7 @@ class Plancton(Daemon):
       "max_docks"         : "ncpus - 2",     # expression to compute max number of containers
       "max_ttl"           : 43200,           # max ttl for a container (default: 12 hours)
       "docker_image"      : "busybox",       # Docker image: repository[:tag]
-      "docker_cmd"        : "/bin/sleep 10", # command to run (string or list)
+      "docker_cmd"        : "/bin/sleep 60", # command to run (string or list)
       "docker_privileged" : False,           # give super privileges to the container
       "max_dock_mem"      : 2000000000,      # maximum RAM memory per container (in bytes)
       "max_dock_swap"     : 0,               # maximum swap per container (in bytes)
