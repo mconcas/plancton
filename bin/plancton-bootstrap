@@ -6,6 +6,10 @@ function fatal() {
   printf "\033[1;4;31mFATAL\033[m\033[31m: $1\033[m\n"
 }
 
+function warning() {
+  printf "\033[1;4;33mWARNING\033[m\033[33m: $1\033[m\n"
+}
+
 function success() {
   printf "\033[32m$1\033[m\n"
 }
@@ -26,6 +30,8 @@ docker --help &> /dev/null || {
 [[ $1 ]] || {
   fatal "Specify a configuration on GitHub in the form user/repo[:branch]."
   fatal "For instance: $0 mconcas/plancton-conf:to-infn/dev"
+  warning "Alternatively you can run a dry run by running:"
+  warning "$0 --dryrun"
   exit 1
 }
 
@@ -38,7 +44,8 @@ GH_REPO=${1%:*}
   exit 1
 }
 rm -rf /etc/plancton
-git -c core.askpass=true clone https://github.com/$GH_REPO ${GH_BRANCH:+-b $GH_BRANCH} /etc/plancton
+
+[[ $1 = "--dryrun" ]] && mkdir -p /etc/plancton/.git/ && touch /etc/plancton/config.yaml || git -c core.askpass=true clone https://github.com/$GH_REPO ${GH_BRANCH:+-b $GH_BRANCH} /etc/plancton
 
 PLANCTON=$(type -p planctonctl | sed -e 's/^planctonctl is //g')
 ( crontab -l | grep -v planctonctl || true ; echo "@reboot $PLANCTON start > /dev/null 2> /dev/null" ) | crontab -
