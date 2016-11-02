@@ -25,5 +25,11 @@ A dry-run example is available by running:
 
 	# plancton-bootstrap <mconcas/plancton-conf:dryrun>
 
-It will run a sample of a Plancton setup relying only on `busybox` pilot containers that will sleep
+or:
+
+	# plancton-bootstrap --dryrun
+
+It will run a sample of a Plancton setup relying only on `busybox` pilot containers that will sleep for some time and will auto-terminate after that.
+
+
 [Credits for the name to G.]
