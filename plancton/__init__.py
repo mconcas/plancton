@@ -75,7 +75,7 @@ def robust(tries=5, delay=3, backoff=2):
   return robust_decorator
 
 class Plancton(Daemon):
-  __version__ = '0.4.3'
+  __version__ = '0.5.1'
   @robust()
   def container_list(self, all=True):
     return self.docker_client.containers(all=all)
@@ -127,7 +127,7 @@ class Plancton(Daemon):
       "max_docks"         : "ncpus - 2",     # expression to compute max number of containers
       "max_ttl"           : 43200,           # max ttl for a container (default: 12 hours)
       "docker_image"      : "busybox",       # Docker image: repository[:tag]
-      "docker_cmd"        : "/bin/sleep 10", # command to run (string or list)
+      "docker_cmd"        : "/bin/sleep 60", # command to run (string or list)
       "docker_privileged" : False,           # give super privileges to the container
       "max_dock_mem"      : 2000000000,      # maximum RAM memory per container (in bytes)
       "max_dock_swap"     : 0,               # maximum swap per container (in bytes)
@@ -166,6 +166,8 @@ class Plancton(Daemon):
       conf = yaml.safe_load(open(self._confdir+"/config.yaml").read())
     except (IOError, YAMLError) as e:
       self.logctl.error("%s/config.yaml could not be read, using previous one: %s" % (self._confdir, e))
+      conf = {}
+    if conf is None:
       conf = {}
     for k in self.conf:
       self.conf[k] = conf.get(k, self.conf[k])
