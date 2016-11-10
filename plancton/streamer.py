@@ -25,7 +25,7 @@ class Streamer():
       # See standard at:  https://docs.influxdata.com/influxdb/v1.0/write_protocols/line_protocol_tutorial/
       data_string = name+","+"".join("%s=%s," % (key,value) for key,value in tag_dict.iteritems())[:-1] + \
          " " + "".join("%s=%s," % (key,value) for key,value in field_dict.iteritems())[:-1] + " " + \
-         str((datetime.utcnow()-datetime.utcfromtimestamp(0)).total_seconds().__int__())
+         str(((datetime.utcnow()-datetime.utcfromtimestamp(0)).total_seconds()*1000000000).__int__())
       parameters = {"db": db}
       # print "[DEBUG]: data string is : %s" % data_string
       return requests.post(self._base_url + "/write", headers=self._head_4write, params=parameters, data=data_string.encode("utf-8"))
