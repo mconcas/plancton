@@ -12,6 +12,7 @@ from docker import Client
 import docker.errors as de
 import requests.exceptions as re
 import sys
+import streamer
 
 def apparmor_enabled():
   try:
@@ -75,7 +76,7 @@ def robust(tries=5, delay=3, backoff=2):
   return robust_decorator
 
 class Plancton(Daemon):
-  __version__ = '0.5.1'
+  __version__ = '0.5.3.1'
   @robust()
   def container_list(self, all=True):
     return self.docker_client.containers(all=all)
@@ -118,24 +119,29 @@ class Plancton(Daemon):
     self._container_prefix = "plancton-slave"
     self.docker_client = Client(base_url=self.sockpath, version='auto')
     self.conf = {
-      "updateconfig"      : 60,              # frequency of config updates (s)
-      "image_expiration"  : 43200,           # frequency of image updates (s)
-      "main_sleep"        : 30,              # main loop sleep (s)
-      "grace_kill"        : 120,             # kill containers after that many s over CPU threshold
-      "grace_spawn"       : 60,              # spawn containers that many seconds after last kill
-      "cpus_per_dock"     : 1,               # number of CPUs per container (non-integer)
-      "max_docks"         : "ncpus - 2",     # expression to compute max number of containers
-      "max_ttl"           : 43200,           # max ttl for a container (default: 12 hours)
-      "docker_image"      : "busybox",       # Docker image: repository[:tag]
-      "docker_cmd"        : "/bin/sleep 60", # command to run (string or list)
-      "docker_privileged" : False,           # give super privileges to the container
-      "max_dock_mem"      : 2000000000,      # maximum RAM memory per container (in bytes)
-      "max_dock_swap"     : 0,               # maximum swap per container (in bytes)
-      "binds"             : [],              # list of bind mounts (all in read-only)
-      "devices"           : [],              # list of exposed devices
-      "capabilities"      : [],              # list of added capabilities (e.g. SYS_ADMIN)
-      "security_opts"     : []               # list of security options (e.g. apparmor profile)
-  }
+      "influxdb_address"  : "localhost:8086",    # hostname and port of the InfluxDB interface: host:port
+      "database_name"     : "plancton-monitor",  # name of the database to feed
+      "database_schema"   : "http",              # schema to adopt (http/https)
+      "updateconfig"      : 60,                  # frequency of config updates (s)
+      "image_expiration"  : 43200,               # frequency of image updates (s)
+      "main_sleep"        : 30,                  # main loop sleep (s)
+      "grace_kill"        : 120,                 # kill containers after that many s over CPU threshold
+      "grace_spawn"       : 60,                  # spawn containers that many seconds after last kill
+      "cpus_per_dock"     : 1,                   # number of CPUs per container (non-integer)
+      "max_docks"         : "ncpus - 2",         # expression to compute max number of containers
+      "max_ttl"           : 43200,               # max ttl for a container (default: 12 hours)
+      "docker_image"      : "busybox",           # Docker image: repository[:tag]
+      "docker_cmd"        : "/bin/sleep 60",     # command to run (string or list)
+      "docker_privileged" : False,               # give super privileges to the container
+      "max_dock_mem"      : 2000000000,          # maximum RAM memory per container (in bytes)
+      "max_dock_swap"     : 0,                   # maximum swap per container (in bytes)
+      "binds"             : [],                  # list of bind mounts (all in read-only)
+      "devices"           : [],                  # list of exposed devices
+      "capabilities"      : [],                  # list of added capabilities (e.g. SYS_ADMIN)
+      "security_opts"     : []                   # list of security options (e.g. apparmor profile)
+    }
+    r = self.streamer = streamer.Streamer(host=self.conf["influxdb_address"].split(':')[0], port=self.conf["influxdb_address"].split(':')[1], \
+      schema=self.conf["database_schema"])
 
   # Get only own running containers, youngest container first if reverse=True.
   def _filtered_list(self, name, reverse=True):
@@ -262,7 +268,7 @@ class Plancton(Daemon):
       self.logctl.error('No active process found for %s with PID %s.' % (container["Id"], jj['State']['Pid']))
       return None
 
-  # Pretty print the statuses of controlled containers.
+  # Pretty print the statuses of controlled containers.
   def _dump_container_list(self):
     status_table = PrettyTable(['n\'', 'docker hash', 'status', 'docker name', '   pid   '])
     status_table.align["   pid   "] = "r"
@@ -282,7 +288,7 @@ class Plancton(Daemon):
         status_table.add_row([num, shortid, status, name, pid])
     self.logctl.info('Container list:\n' + str(status_table))
 
-  # Return the number of running containers.
+  # Return the number of running containers.
   def _count_containers(self):
     try:
       clist = self.container_list(all=False)
@@ -338,6 +344,9 @@ class Plancton(Daemon):
     self.logctl.info('---- plancton daemon v%s ----' % self.__version__)
     self._setup_log_files()
     self._read_conf()
+    self.logctl.debug("Attempting to create an InfluxDB database \"%s\": at %s:%s" % \
+      (self.conf["database_name"], self.conf["influxdb_address"].split(':')[0], self.conf["influxdb_address"].split(':')[1]))
+    self.streamer.create_db(self.conf["database_name"]) 
     self.docker_pull(*self.conf["docker_image"].split(":", 1))
     self._control_containers()
     self._do_main_loop = True
@@ -358,6 +367,9 @@ class Plancton(Daemon):
       self._last_update_time = time.time()
     running = self._count_containers()
     self.logctl.debug('CPU used: %.2f%%, available: %.2f%%' % (self.efficiency, self.idle))
+    r = self.streamer.write_pt(db=self.conf["database_name"], name="measurement", tag_dict={"hostname": self._hostname}, \
+       field_dict={"cpu_eff": self.efficiency, "containers": running})
+    self.logctl.debug("Sending data to db \"%s\": %s" % (self.conf["database_name"], r))
     fitting_docks = int(self.idle*0.95*self._num_cpus/(self.conf["cpus_per_dock"]*100))
     launchable_containers = min(fitting_docks, max(self.conf["max_docks"]-running, 0))
     self.logctl.debug('Potentially fitting containers based on CPU utilisation: %d', fitting_docks)

@@ -6,3 +6,5 @@ scratch
 dist
 build
 plancton.egg-info
+plancton/tmp
+build.sh
