@@ -140,8 +140,6 @@ class Plancton(Daemon):
       "capabilities"      : [],                  # list of added capabilities (e.g. SYS_ADMIN)
       "security_opts"     : []                   # list of security options (e.g. apparmor profile)
     }
-    r = self.streamer = streamer.Streamer(host=self.conf["influxdb_address"].split(':')[0], port=self.conf["influxdb_address"].split(':')[1], \
-      schema=self.conf["database_schema"])
 
   # Get only own running containers, youngest container first if reverse=True.
   def _filtered_list(self, name, reverse=True):
@@ -362,6 +360,10 @@ class Plancton(Daemon):
     self.logctl.info('---- plancton daemon v%s ----' % self.__version__)
     self._setup_log_files()
     self._read_conf()
+    self.logctl.debug("Connecting to InfluxDB monitoring databases at: %s:%s" % \
+      (self.conf["influxdb_address"].split(':')[0], self.conf["influxdb_address"].split(':')[1]))
+    self.streamer = streamer.Streamer(host=self.conf["influxdb_address"].split(':')[0], port=self.conf["influxdb_address"].split(':')[1], \
+      schema=self.conf["database_schema"])
     self.logctl.debug("Attempting to create an InfluxDB database \"%s\": at %s:%s" % \
       (self.conf["database_name"], self.conf["influxdb_address"].split(':')[0], self.conf["influxdb_address"].split(':')[1]))
     self.streamer.create_db(self.conf["database_name"])
