@@ -9,7 +9,7 @@ install: |
   set -x
   git rev-parse HEAD
   sudo pip install -e .
-  sudo plancton-bootstrap mconcas/plancton-conf:cern-test
+  sudo plancton-bootstrap --dryrun
   sudo planctonctl start
 
 script: |
