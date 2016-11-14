@@ -306,25 +306,43 @@ class Plancton(Daemon):
       self.logctl.error("Couldn't get containers list: %s", e)
       return
     for i in clist:
+      cont_uptime = 0.
       if not i.get("Names", [""])[0][1:].startswith(self._container_prefix):
         self.logctl.debug("Ignoring container %s", i.get("Names", [""])[0][1:])
         continue
       to_remove = False
       # TTL threshold block
-      if i['Status'].startswith("Up"):
+      if "running" in i['State']:
         try:
           insdata = self.container_inspect(i["Id"])
         except Exception as e:
           self.logctl.error("Couldn't get container information! %s", e)
         else:
           statobj = datetime.strptime(insdata['State']['StartedAt'][:19], "%Y-%m-%dT%H:%M:%S")
-          if (utc_time() - time.mktime(statobj.timetuple())) > self.conf["max_ttl"]:
+          cont_uptime = utc_time() - time.mktime(statobj.timetuple())
+          if cont_uptime > self.conf["max_ttl"]:
             self.logctl.info('Killing %s since it exceeded the max TTL', i['Id'])
+            self.streamer.write_pt(db=self.conf["database_name"], name="container", \
+                tag_dict={"hostname": self._hostname, "started": True}, field_dict={"uptime": cont_uptime})
             to_remove = True
           else:
             self.logctl.debug("Container %s is below its maximum TTL, leaving it alone", i["Id"])
       else:
         self.logctl.info("Killing %s as it has a bad status (%s)", i["Id"], i["Status"])
+        if "exited" in i["State"]:
+          try:
+            insdata = self.container_inspect(i["Id"])
+          except Exception as e:
+            self.logctl.error("Couldn't get container information! %s", e)
+          else:
+            statobj_start = datetime.strptime(insdata['State']['StartedAt'][:19], "%Y-%m-%dT%H:%M:%S")
+            statobj_end = datetime.strptime(insdata['State']['FinishedAt'][:19], "%Y-%m-%dT%H:%M:%S")
+            cont_uptime = time.mktime(statobj_end.timetuple()) - time.mktime(statobj_start.timetuple())
+            self.streamer.write_pt(db=self.conf["database_name"], name="container", \
+              tag_dict={"hostname": self._hostname, "started": True}, field_dict={"uptime": cont_uptime})
+        if "created" in i["State"]:
+          self.streamer.write_pt(db=self.conf["database_name"], name="container", \
+            tag_dict={"hostname": self._hostname, "started": False}, field_dict={"uptime": 0})
         to_remove = True
 
       if to_remove:
@@ -333,7 +351,7 @@ class Plancton(Daemon):
         except Exception as e:
           self.logctl.warning('It was not possible to remove container with id %s: %s', i['Id'], e)
         else:
-          self.logctl.info('Removed container %s', i["Id"])
+          self.logctl.info("Removed container %s", i["Id"])
 
   def onexit(self):
     self.logctl.info('Graceful termination requested: will exit gracefully soon.')
@@ -346,7 +364,7 @@ class Plancton(Daemon):
     self._read_conf()
     self.logctl.debug("Attempting to create an InfluxDB database \"%s\": at %s:%s" % \
       (self.conf["database_name"], self.conf["influxdb_address"].split(':')[0], self.conf["influxdb_address"].split(':')[1]))
-    self.streamer.create_db(self.conf["database_name"]) 
+    self.streamer.create_db(self.conf["database_name"])
     self.docker_pull(*self.conf["docker_image"].split(":", 1))
     self._control_containers()
     self._do_main_loop = True
