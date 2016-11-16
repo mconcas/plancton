@@ -76,7 +76,7 @@ def robust(tries=5, delay=3, backoff=2):
   return robust_decorator
 
 class Plancton(Daemon):
-  __version__ = '0.5.3.1'
+  __version__ = '0.5.3.333'
   @robust()
   def container_list(self, all=True):
     return self.docker_client.containers(all=all)
@@ -180,6 +180,15 @@ class Plancton(Daemon):
     if not isinstance(self.conf["docker_cmd"], list):
       self.conf["docker_cmd"] = self.conf["docker_cmd"].split(" ")
     self.logctl.debug("Configuration:\n%s" % json.dumps(self.conf, indent=2))
+
+  # Set up monitoring target.
+  def _influx_setup(self):
+    self.streamer = streamer.Streamer(host=self.conf["influxdb_address"].split(':')[0], port=self.conf["influxdb_address"].split(':')[1], \
+      schema=self.conf["database_schema"])
+    self.logctl.debug("Creating \"%s\" database: at %s:%s..." % (self.conf["database_name"], self.conf["influxdb_address"].split(':')[0], \
+      self.conf["influxdb_address"].split(':')[1]))
+    resp = self.streamer.create_db(self.conf["database_name"])
+    self.logctl.debug("Response is: %s" % resp)
 
   # Efficiency is calculated subtracting idletime per cpu from uptime.
   def _set_cpu_efficiency(self):
@@ -320,12 +329,16 @@ class Plancton(Daemon):
           cont_uptime = utc_time() - time.mktime(statobj.timetuple())
           if cont_uptime > self.conf["max_ttl"]:
             self.logctl.info('Killing %s since it exceeded the max TTL', i['Id'])
-            self.streamer.write_pt(db=self.conf["database_name"], name="container", \
+            try:
+              self.streamer.write_pt(db=self.conf["database_name"], name="container", \
                 tag_dict={"hostname": self._hostname, "started": True}, field_dict={"uptime": cont_uptime})
+            except re.ConnectionError as e:
+              self.logctl.warning("Could not send container data to database: %s", e)
             to_remove = True
           else:
             self.logctl.debug("Container %s is below its maximum TTL, leaving it alone", i["Id"])
       else:
+        # Bad status block
         self.logctl.info("Killing %s as it has a bad status (%s)", i["Id"], i["Status"])
         if "exited" in i["State"]:
           try:
@@ -336,11 +349,17 @@ class Plancton(Daemon):
             statobj_start = datetime.strptime(insdata['State']['StartedAt'][:19], "%Y-%m-%dT%H:%M:%S")
             statobj_end = datetime.strptime(insdata['State']['FinishedAt'][:19], "%Y-%m-%dT%H:%M:%S")
             cont_uptime = time.mktime(statobj_end.timetuple()) - time.mktime(statobj_start.timetuple())
-            self.streamer.write_pt(db=self.conf["database_name"], name="container", \
-              tag_dict={"hostname": self._hostname, "started": True}, field_dict={"uptime": cont_uptime})
+            try:
+              self.streamer.write_pt(db=self.conf["database_name"], name="container", \
+                tag_dict={"hostname": self._hostname, "started": True}, field_dict={"uptime": cont_uptime})
+            except re.ConnectionError as e:
+              self.logctl.warning("Could not send container data to database: %s", e)
         if "created" in i["State"]:
-          self.streamer.write_pt(db=self.conf["database_name"], name="container", \
-            tag_dict={"hostname": self._hostname, "started": False}, field_dict={"uptime": 0})
+          try:
+            self.streamer.write_pt(db=self.conf["database_name"], name="container", \
+              tag_dict={"hostname": self._hostname, "started": False}, field_dict={"uptime": 0})
+          except re.ConnectionError as e:
+            self.logctl.warning("Could not send container data to database: %s", e)
         to_remove = True
 
       if to_remove:
@@ -360,13 +379,7 @@ class Plancton(Daemon):
     self.logctl.info('---- plancton daemon v%s ----' % self.__version__)
     self._setup_log_files()
     self._read_conf()
-    self.logctl.debug("Connecting to InfluxDB monitoring databases at: %s:%s" % \
-      (self.conf["influxdb_address"].split(':')[0], self.conf["influxdb_address"].split(':')[1]))
-    self.streamer = streamer.Streamer(host=self.conf["influxdb_address"].split(':')[0], port=self.conf["influxdb_address"].split(':')[1], \
-      schema=self.conf["database_schema"])
-    self.logctl.debug("Attempting to create an InfluxDB database \"%s\": at %s:%s" % \
-      (self.conf["database_name"], self.conf["influxdb_address"].split(':')[0], self.conf["influxdb_address"].split(':')[1]))
-    self.streamer.create_db(self.conf["database_name"])
+    self._influx_setup()
     self.docker_pull(*self.conf["docker_image"].split(":", 1))
     self._control_containers()
     self._do_main_loop = True
