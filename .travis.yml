@@ -9,7 +9,7 @@ install: |
   set -x
   git rev-parse HEAD
   sudo pip install -e .
-  sudo plancton-bootstrap --dryrun
+  sudo plancton-bootstrap mconcas/plancton-conf:travis-test
   sudo planctonctl start
 
 script: |

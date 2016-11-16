@@ -119,7 +119,7 @@ class Plancton(Daemon):
     self._container_prefix = "plancton-slave"
     self.docker_client = Client(base_url=self.sockpath, version='auto')
     self.conf = {
-      "influxdb_address"  : "portquiz.net:8086",    # hostname and port of the InfluxDB interface: host:port
+      "influxdb_address"  : "localhost:8086",    # hostname and port of the InfluxDB interface: host:port
       "database_name"     : "plancton-monitor",  # name of the database to feed
       "database_schema"   : "http",              # schema to adopt (http/https)
       "updateconfig"      : 60,                  # frequency of config updates (s)
