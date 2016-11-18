@@ -116,7 +116,7 @@ class Plancton(Daemon):
     self._num_cpus = cpu_count()
     self._hostname = gethostname().split('.')[0]
     self._cont_config = None  # container configuration (dict)
-    self._container_prefix = "plancton-slave"
+    self._container_prefix = "plancton-worker"
     self.docker_client = Client(base_url=self.sockpath, version='auto')
     self.conf = {
       "influxdb_address"  : "localhost:8086",    # hostname and port of the InfluxDB interface: host:port
