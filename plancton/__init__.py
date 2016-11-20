@@ -10,7 +10,6 @@ from datetime import datetime
 from daemon import Daemon
 from docker import Client
 import docker.errors as de
-import requests.exceptions as re
 import sys
 import streamer
 
@@ -46,7 +45,7 @@ def robust(tries=5, delay=3, backoff=2):
       while ltries > 1:
         try:
           return f(self, *args, **kwargs)
-        except re.ConnectionError, e:
+        except requests.exceptions.ConnectionError, e:
           msg = "[%s], Failed to reach docker, retrying in %d seconds." % \
               (f.__name__, ldelay)
           self.logctl.warning(msg)
@@ -54,7 +53,7 @@ def robust(tries=5, delay=3, backoff=2):
           time.sleep(ldelay)
           ltries -= 1
           ldelay *= backoff
-        except re.ReadTimeout, e: # Unresponsive docker daemon
+        except requests.exceptions.ReadTimeout, e: # Unresponsive docker daemon
           msg = "[%s], Failed to reach docker, retrying in %d seconds." % (f.__name__, ldelay)
           self.logctl.warning(msg)
           self.logctl.warning(e)
