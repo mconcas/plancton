@@ -11,7 +11,7 @@ from daemon import Daemon
 from docker import Client
 import docker.errors as de
 import sys
-import streamer
+from streamer import Streamer
 
 def apparmor_enabled():
   try:
@@ -118,26 +118,24 @@ class Plancton(Daemon):
     self._container_prefix = "plancton-worker"
     self.docker_client = Client(base_url=self.sockpath, version='auto')
     self.conf = {
-      "influxdb_address"  : "localhost:8086",    # hostname and port of the InfluxDB interface: host:port
-      "database_name"     : "plancton-monitor",  # name of the database to feed
-      "database_schema"   : "http",              # schema to adopt (http/https)
-      "updateconfig"      : 60,                  # frequency of config updates (s)
-      "image_expiration"  : 43200,               # frequency of image updates (s)
-      "main_sleep"        : 30,                  # main loop sleep (s)
-      "grace_kill"        : 120,                 # kill containers after that many s over CPU threshold
-      "grace_spawn"       : 60,                  # spawn containers that many seconds after last kill
-      "cpus_per_dock"     : 1,                   # number of CPUs per container (non-integer)
-      "max_docks"         : "ncpus - 2",         # expression to compute max number of containers
-      "max_ttl"           : 43200,               # max ttl for a container (default: 12 hours)
-      "docker_image"      : "busybox",           # Docker image: repository[:tag]
-      "docker_cmd"        : "/bin/sleep 60",     # command to run (string or list)
-      "docker_privileged" : False,               # give super privileges to the container
-      "max_dock_mem"      : 2000000000,          # maximum RAM memory per container (in bytes)
-      "max_dock_swap"     : 0,                   # maximum swap per container (in bytes)
-      "binds"             : [],                  # list of bind mounts (all in read-only)
-      "devices"           : [],                  # list of exposed devices
-      "capabilities"      : [],                  # list of added capabilities (e.g. SYS_ADMIN)
-      "security_opts"     : []                   # list of security options (e.g. apparmor profile)
+      "influxdb_url"      : None,             # URL to InfluxDB (with #database)
+      "updateconfig"      : 60,               # frequency of config updates (s)
+      "image_expiration"  : 43200,            # frequency of image updates (s)
+      "main_sleep"        : 30,               # main loop sleep (s)
+      "grace_kill"        : 120,              # kill after secs over CPU threshold
+      "grace_spawn"       : 60,               # spawn secs after last kill
+      "cpus_per_dock"     : 1,                # number of CPUs per container (frac)
+      "max_docks"         : "ncpus - 2",      # expression: compute max containers
+      "max_ttl"           : 43200,            # max ttl for a container (12 hours)
+      "docker_image"      : "busybox",        # Docker image: repository[:tag]
+      "docker_cmd"        : "/bin/sleep 60",  # command to run (string or list)
+      "docker_privileged" : False,            # run container privileged
+      "max_dock_mem"      : 2000000000,       # maximum RAM per container (bytes)
+      "max_dock_swap"     : 0,                # maximum swap per container (bytes)
+      "binds"             : [],               # list of bind mounts (all read-only)
+      "devices"           : [],               # list of exposed devices
+      "capabilities"      : [],               # list of added caps (e.g. SYS_ADMIN)
+      "security_opts"     : []                # sec options (e.g. apparmor profile)
     }
 
   # Get only own running containers, youngest container first if reverse=True.
@@ -178,16 +176,18 @@ class Plancton(Daemon):
     self.conf["max_docks"] = int(eval(str(self.conf["max_docks"])))
     if not isinstance(self.conf["docker_cmd"], list):
       self.conf["docker_cmd"] = self.conf["docker_cmd"].split(" ")
+    if self.conf["influxdb_url"] and not "#" in self.conf["influxdb_url"]:
+      # Invalid InfluxDB URL: disable monitoring
+      self.conf["influxdb_url"] = None
     self.logctl.debug("Configuration:\n%s" % json.dumps(self.conf, indent=2))
 
   # Set up monitoring target.
-  def _influx_setup(self):
-    self.streamer = streamer.Streamer(host=self.conf["influxdb_address"].split(':')[0], port=self.conf["influxdb_address"].split(':')[1], \
-      schema=self.conf["database_schema"])
-    self.logctl.debug("Creating \"%s\" database: at %s:%s..." % (self.conf["database_name"], self.conf["influxdb_address"].split(':')[0], \
-      self.conf["influxdb_address"].split(':')[1]))
-    resp = self.streamer.create_db(self.conf["database_name"])
-    self.logctl.debug("Response is: %s" % resp)
+  def _influxdb_setup(self):
+    if not self.conf["influxdb_url"]:
+      self.streamer = None
+      return
+    baseurl,db = self.conf["influxdb_url"].split("#")
+    self.streamer = Streamer(baseurl=baseurl, database=db, logctl=self.logctl)
 
   # Efficiency is calculated subtracting idletime per cpu from uptime.
   def _set_cpu_efficiency(self):
@@ -312,7 +312,6 @@ class Plancton(Daemon):
       self.logctl.error("Couldn't get containers list: %s", e)
       return
     for i in clist:
-      cont_uptime = 0.
       if not i.get("Names", [""])[0][1:].startswith(self._container_prefix):
         self.logctl.debug("Ignoring container %s", i.get("Names", [""])[0][1:])
         continue
@@ -325,14 +324,15 @@ class Plancton(Daemon):
           self.logctl.error("Couldn't get container information! %s", e)
         else:
           statobj = datetime.strptime(insdata['State']['StartedAt'][:19], "%Y-%m-%dT%H:%M:%S")
-          cont_uptime = utc_time() - time.mktime(statobj.timetuple())
-          if cont_uptime > self.conf["max_ttl"]:
+          dock_uptime = utc_time() - time.mktime(statobj.timetuple())
+          if dock_uptime > self.conf["max_ttl"]:
             self.logctl.info('Killing %s since it exceeded the max TTL', i['Id'])
-            try:
-              self.streamer.write_pt(db=self.conf["database_name"], name="container", \
-                tag_dict={"hostname": self._hostname, "started": True}, field_dict={"uptime": cont_uptime})
-            except re.ConnectionError as e:
-              self.logctl.warning("Could not send container data to database: %s", e)
+            if self.streamer:
+               self.streamer.send(series="container",
+                                  tags={ "hostname": self._hostname,
+                                         "started": True,
+                                         "killed": True },
+                                  fields={ "uptime": dock_uptime })
             to_remove = True
           else:
             self.logctl.debug("Container %s is below its maximum TTL, leaving it alone", i["Id"])
@@ -347,18 +347,20 @@ class Plancton(Daemon):
           else:
             statobj_start = datetime.strptime(insdata['State']['StartedAt'][:19], "%Y-%m-%dT%H:%M:%S")
             statobj_end = datetime.strptime(insdata['State']['FinishedAt'][:19], "%Y-%m-%dT%H:%M:%S")
-            cont_uptime = time.mktime(statobj_end.timetuple()) - time.mktime(statobj_start.timetuple())
-            try:
-              self.streamer.write_pt(db=self.conf["database_name"], name="container", \
-                tag_dict={"hostname": self._hostname, "started": True}, field_dict={"uptime": cont_uptime})
-            except re.ConnectionError as e:
-              self.logctl.warning("Could not send container data to database: %s", e)
+            dock_uptime = time.mktime(statobj_end.timetuple()) - time.mktime(statobj_start.timetuple())
+            if self.streamer:
+              self.streamer.send(series="container",
+                                 tags={ "hostname": self._hostname,
+                                        "started": True,
+                                        "killed": False },
+                                 fields={"uptime": dock_uptime})
         if "created" in i["State"]:
-          try:
-            self.streamer.write_pt(db=self.conf["database_name"], name="container", \
-              tag_dict={"hostname": self._hostname, "started": False}, field_dict={"uptime": 0})
-          except re.ConnectionError as e:
-            self.logctl.warning("Could not send container data to database: %s", e)
+          if self.streamer:
+            self.streamer.send(series="container",
+                               tags={ "hostname": self._hostname,
+                                      "started": False,
+                                      "killed": False },
+                               fields={ "uptime": 0 })
         to_remove = True
 
       if to_remove:
@@ -378,7 +380,7 @@ class Plancton(Daemon):
     self.logctl.info('---- plancton daemon v%s ----' % self.__version__)
     self._setup_log_files()
     self._read_conf()
-    self._influx_setup()
+    self._influxdb_setup()
     self.docker_pull(*self.conf["docker_image"].split(":", 1))
     self._control_containers()
     self._do_main_loop = True
@@ -391,17 +393,21 @@ class Plancton(Daemon):
     delta_update = now - self._last_update_time
     self._overhead_control()
     prev_img = self.conf["docker_image"]
+    prev_influxdb_url = self.conf["influxdb_url"]
     if delta_config >= int(self.conf['updateconfig']):
       self._read_conf()
       self._last_confup_time = time.time()
     if prev_img != self.conf["docker_image"] or delta_update >= int(self.conf['image_expiration']):
       self.docker_pull(*self.conf["docker_image"].split(":", 1))
       self._last_update_time = time.time()
+    if prev_influxdb_url != self.conf["influxdb_url"]:
+      self._influxdb_setup()
     running = self._count_containers()
     self.logctl.debug('CPU used: %.2f%%, available: %.2f%%' % (self.efficiency, self.idle))
-    r = self.streamer.write_pt(db=self.conf["database_name"], name="measurement", tag_dict={"hostname": self._hostname}, \
-       field_dict={"cpu_eff": self.efficiency, "containers": running})
-    self.logctl.debug("Sending data to db \"%s\": %s" % (self.conf["database_name"], r))
+    if self.streamer:
+      self.streamer.send(series="measurement",
+                         tags={ "hostname": self._hostname },
+                         fields={ "cpu_eff": self.efficiency, "containers": running })
     fitting_docks = int(self.idle*0.95*self._num_cpus/(self.conf["cpus_per_dock"]*100))
     launchable_containers = min(fitting_docks, max(self.conf["max_docks"]-running, 0))
     self.logctl.debug('Potentially fitting containers based on CPU utilisation: %d', fitting_docks)
