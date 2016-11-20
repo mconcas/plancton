@@ -16,7 +16,7 @@ confdir = '/etc/plancton'
 
 # Parse command-line arguments
 try:
-  opts, args = getopt(sys.argv[1:], '', [ '--user', 'logdir=', 'pidfile=', 'confdir=' ])
+  opts, args = getopt(sys.argv[1:], '', [ 'user', 'logdir=', 'pidfile=', 'confdir=' ])
   for o, a in opts:
     if o == '--pidfile':
       pidfile = a
@@ -29,10 +29,10 @@ try:
       pidfile = '%s/plancton.pid' % home
       logdir = '%s/log' % home
       confdir = '%s/conf' % home
-      if not os.path.isdir(daemondir):
-        os.mkdir(daemondir, 0700)
+      if not os.path.isdir(home):
+        os.mkdir(home, 0700)
       else:
-        os.chmod(daemondir, 0700)
+        os.chmod(home, 0700)
     else:
       assert False, 'This should not happen: o=%s a=%s' % (o, a)
 
