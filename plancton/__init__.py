@@ -11,7 +11,7 @@ from daemon import Daemon
 from docker import Client
 import docker.errors as de
 import sys
-from streamer import Streamer
+from influxdb_streamer import InfluxDBStreamer
 
 def apparmor_enabled():
   try:
@@ -187,7 +187,7 @@ class Plancton(Daemon):
       self.streamer = None
       return
     baseurl,db = self.conf["influxdb_url"].split("#")
-    self.streamer = Streamer(baseurl=baseurl, database=db)
+    self.streamer = InfluxDBStreamer(baseurl=baseurl, database=db)
 
   # Efficiency is calculated subtracting idletime per cpu from uptime.
   def _set_cpu_efficiency(self):

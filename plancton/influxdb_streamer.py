@@ -6,7 +6,7 @@ from datetime import datetime
 # Exceptions and logging are supposed to be managed by the calling module.
 # Plancton must handle every exception.
 
-class Streamer():
+class InfluxDBStreamer():
   __version__ = "0.1"
   def __init__(self, baseurl, database):
     self.baseurl = baseurl
