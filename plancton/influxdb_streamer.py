@@ -31,7 +31,7 @@ class InfluxDBStreamer():
       self.db_is_created = False
     return self.db_is_created
 
-  def send(self, series, tags, fields):
+  def __call__(self, series, tags, fields):
     if not self.db_is_created:
       if not self.create_db():
         return False

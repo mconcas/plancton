@@ -184,7 +184,7 @@ class Plancton(Daemon):
   # Set up monitoring target.
   def _influxdb_setup(self):
     if not self.conf["influxdb_url"]:
-      self.streamer = None
+      self.streamer = lambda *x,**y: True
       return
     baseurl,db = self.conf["influxdb_url"].split("#")
     self.streamer = InfluxDBStreamer(baseurl=baseurl, database=db)
@@ -327,12 +327,11 @@ class Plancton(Daemon):
           dock_uptime = utc_time() - time.mktime(statobj.timetuple())
           if dock_uptime > self.conf["max_ttl"]:
             self.logctl.info('Killing %s since it exceeded the max TTL', i['Id'])
-            if self.streamer:
-               self.streamer.send(series="container",
-                                  tags={ "hostname": self._hostname,
-                                         "started": True,
-                                         "killed": True },
-                                  fields={ "uptime": dock_uptime })
+            self.streamer(series="container",
+                          tags={ "hostname": self._hostname,
+                                 "started": True,
+                                 "killed": True },
+                          fields={ "uptime": dock_uptime })
             to_remove = True
           else:
             self.logctl.debug("Container %s is below its maximum TTL, leaving it alone", i["Id"])
@@ -348,19 +347,17 @@ class Plancton(Daemon):
             statobj_start = datetime.strptime(insdata['State']['StartedAt'][:19], "%Y-%m-%dT%H:%M:%S")
             statobj_end = datetime.strptime(insdata['State']['FinishedAt'][:19], "%Y-%m-%dT%H:%M:%S")
             dock_uptime = time.mktime(statobj_end.timetuple()) - time.mktime(statobj_start.timetuple())
-            if self.streamer:
-              self.streamer.send(series="container",
-                                 tags={ "hostname": self._hostname,
-                                        "started": True,
-                                        "killed": False },
-                                 fields={"uptime": dock_uptime})
+            self.streamer(series="container",
+                          tags={ "hostname": self._hostname,
+                                 "started": True,
+                                 "killed": False },
+                          fields={"uptime": dock_uptime})
         if "created" in i["State"]:
-          if self.streamer:
-            self.streamer.send(series="container",
-                               tags={ "hostname": self._hostname,
-                                      "started": False,
-                                      "killed": False },
-                               fields={ "uptime": 0 })
+          self.streamer(series="container",
+                        tags={ "hostname": self._hostname,
+                               "started": False,
+                               "killed": False },
+                        fields={ "uptime": 0 })
         to_remove = True
 
       if to_remove:
@@ -406,10 +403,9 @@ class Plancton(Daemon):
       self._influxdb_setup()
     running = self._count_containers()
     self.logctl.debug('CPU used: %.2f%%, available: %.2f%%' % (self.efficiency, self.idle))
-    if self.streamer:
-      self.streamer.send(series="measurement",
-                         tags={ "hostname": self._hostname },
-                         fields={ "cpu_eff": self.efficiency, "containers": running })
+    self.streamer(series="measurement",
+                  tags={ "hostname": self._hostname },
+                  fields={ "cpu_eff": self.efficiency, "containers": running })
     fitting_docks = int(self.idle*0.95*self._num_cpus/(self.conf["cpus_per_dock"]*100))
     launchable_containers = min(fitting_docks, max(self.conf["max_docks"]-running, 0))
     self.logctl.debug('Potentially fitting containers based on CPU utilisation: %d', fitting_docks)
