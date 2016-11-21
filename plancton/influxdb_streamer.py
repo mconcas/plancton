@@ -18,14 +18,16 @@ class InfluxDBStreamer():
 
   def create_db(self):
     try:
-      self.logctl.debug("Creating InfluxDB database: %s" % self.database)
+      self.logctl.debug("Creating database: %s" % self.database)
       r = requests.get(self.baseurl + "/query",
                        headers=self._headers_query,
                        params={ "q": "CREATE DATABASE \"%s\"" % self.database,
                                 "db": self.database })
-      self.db_is_created = r.status_code >= 200 and r.status_code < 300
+      self.logctl.debug("Creating database %s returned %d" % (self.database, r.status_code))
+      r.raise_for_status()
+      self.db_is_created = True
     except requests.exceptions.RequestException as e:
-      self.logctl.error("Error creating InfluxDB database: %s" % e)
+      self.logctl.error("Error creating database: %s" % e)
       self.db_is_created = False
     return self.db_is_created
 
@@ -38,16 +40,17 @@ class InfluxDBStreamer():
                   ",".join(["%s=%s" % (x,tags[x]) for x in tags]) + " " +     \
                   ",".join(["%s=%s" % (x,fields[x]) for x in fields]) + " " + \
                   str(int((datetime.utcnow()-datetime.utcfromtimestamp(0)).total_seconds()*1000000000))
-    self.logctl.debug("Sending line to InfluxDB database %s: %s" % (self.database, data_string))
+    self.logctl.debug("Sending line to database %s: %s" % (self.database, data_string))
 
     try:
       r = requests.post(self.baseurl+"/write",
                         headers=self._headers_write,
                         params={ "db": self.database },
                         data=data_string.encode("utf-8"))
-      ok = r.status_code >= 200 and r.status_code < 300
+      self.logctl.debug("Sending data returned %d" % r.status_code)
+      r.raise_for_status()
+      return True
     except requests.exceptions.RequestException:
-      self.logctl.error("Error sending data to InfluxDB: %s" % e)
-      ok = False
+      self.logctl.error("Error sending data: %s" % e)
       self.db_is_created = False
-    return ok
+      return False
