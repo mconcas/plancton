@@ -27,8 +27,8 @@ class Daemon(object):
         self.pid = None
 
         ## Custom logger for control messages
-        self.logctl = logging.getLogger( self.name )
-        logctl_formatter = logging.Formatter(name + ': %(levelname)s: %(message)s')
+        self.logctl = logging.getLogger()
+        logctl_formatter = logging.Formatter(name+'[%(name)s]: %(levelname)s: %(message)s')
         stderr_handler = logging.StreamHandler(sys.stderr)
         stderr_handler.setFormatter(logctl_formatter)
         self.logctl.addHandler(stderr_handler)
@@ -39,7 +39,7 @@ class Daemon(object):
             syslog_handler.setFormatter(logctl_formatter)
             self.logctl.addHandler(syslog_handler)
 
-        self.logctl.setLevel(logging.DEBUG)
+        self.logctl.setLevel(logging.INFO)
 
     def getSyslogHandler(self, log_level=logging.DEBUG, formatter=None):
         """ Gets a syslog handler on Linux and OS X.

@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-import os
-import requests
+import os, requests, logging
 from datetime import datetime
 
 # Class used to stream data to an InfluxDB database.
@@ -9,23 +8,24 @@ from datetime import datetime
 
 class Streamer():
   __version__ = "0.1"
-  def __init__(self, baseurl, database, logctl=None):
+  def __init__(self, baseurl, database):
     self.baseurl = baseurl
     self.database = database
-    self.logctl = logctl
+    self.logctl = logging.getLogger("influxdb_streamer")
     self.db_is_created = False
     self._headers_query = {"Content-type": "application/json", "Accept": "text/plain"}
     self._headers_write = {"Content-type": "application/octet-stream", "Accept": "text/plain"}
 
   def create_db(self):
     try:
+      self.logctl.debug("Creating InfluxDB database: %s" % self.database)
       r = requests.get(self.baseurl + "/query",
                        headers=self._headers_query,
                        params={ "q": "CREATE DATABASE \"%s\"" % self.database,
                                 "db": self.database })
       self.db_is_created = r.status_code >= 200 and r.status_code < 300
     except requests.exceptions.RequestException as e:
-      if self.logctl: self.logctl.error("Error creating InfluxDB database: %s" % e)
+      self.logctl.error("Error creating InfluxDB database: %s" % e)
       self.db_is_created = False
     return self.db_is_created
 
@@ -38,6 +38,7 @@ class Streamer():
                   ",".join(["%s=%s" % (x,tags[x]) for x in tags]) + " " +     \
                   ",".join(["%s=%s" % (x,fields[x]) for x in fields]) + " " + \
                   str(int((datetime.utcnow()-datetime.utcfromtimestamp(0)).total_seconds()*1000000000))
+    self.logctl.debug("Sending line to InfluxDB database %s: %s" % (self.database, data_string))
 
     try:
       r = requests.post(self.baseurl+"/write",
@@ -46,7 +47,7 @@ class Streamer():
                         data=data_string.encode("utf-8"))
       ok = r.status_code >= 200 and r.status_code < 300
     except requests.exceptions.RequestException:
-      if self.logctl: self.logctl.error("Error sending data to InfluxDB: %s" % e)
+      self.logctl.error("Error sending data to InfluxDB: %s" % e)
       ok = False
       self.db_is_created = False
     return ok

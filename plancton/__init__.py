@@ -158,7 +158,7 @@ class Plancton(Daemon):
       mode='a', maxBytes=10000000, backupCount=50)
     log_file_handler.setFormatter(logging.Formatter(format, datefmt))
     log_file_handler.doRollover()
-    self.logctl.setLevel(10)
+    self.logctl.setLevel(logging.DEBUG)
     self.logctl.addHandler(log_file_handler)
 
   # Parse configuration file `config.yaml` and change default value if specified.
@@ -187,7 +187,7 @@ class Plancton(Daemon):
       self.streamer = None
       return
     baseurl,db = self.conf["influxdb_url"].split("#")
-    self.streamer = Streamer(baseurl=baseurl, database=db, logctl=self.logctl)
+    self.streamer = Streamer(baseurl=baseurl, database=db)
 
   # Efficiency is calculated subtracting idletime per cpu from uptime.
   def _set_cpu_efficiency(self):
@@ -378,6 +378,8 @@ class Plancton(Daemon):
 
   def init(self):
     self.logctl.info('---- plancton daemon v%s ----' % self.__version__)
+    logging.getLogger("requests").setLevel(logging.WARNING)
+    logging.getLogger("docker").setLevel(logging.WARNING)
     self._setup_log_files()
     self._read_conf()
     self._influxdb_setup()
