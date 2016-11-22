@@ -22,3 +22,8 @@ script: |
   ls -l $PIDFILE || true
   sudo test -f $PIDFILE || dielog
   sudo kill -0 $(sudo cat $PIDFILE) || dielog
+  sudo planctonctl drain
+  sleep 40
+  sudo grep -qi "no new containers will be started" /var/log/plancton/plancton.log || dielog
+  sudo planctonctl resume
+  [[ ! -e /var/run/plancton/drain ]]

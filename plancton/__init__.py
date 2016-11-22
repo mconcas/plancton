@@ -103,20 +103,23 @@ class Plancton(Daemon):
    return float(100 - self.efficiency)
 
   # Set daemon name, pidfile, log directory and location of docker socket.
-  def __init__(self, name, pidfile, logdir, confdir, socket_location='unix://var/run/docker.sock'):
+  def __init__(self, name, pidfile, logdir, rundir, confdir,
+               socket_url="unix://var/run/docker.sock"):
     super(Plancton, self).__init__(name, pidfile)
     self._start_time = self._last_update_time = self._last_confup_time = time.time()
     self._last_kill_time = 0
     self._overhead_first_time = 0
     self.uptime0,self.idletime0 = cpu_times()
     self._logdir = logdir
+    self._rundir = rundir
     self._confdir = confdir
-    self.sockpath = socket_location
+    self.sockpath = socket_url
     self._num_cpus = cpu_count()
     self._hostname = gethostname().split('.')[0]
     self._cont_config = None  # container configuration (dict)
     self._container_prefix = "plancton-worker"
-    self.docker_client = Client(base_url=self.sockpath, version='auto')
+    self._drainfile = self._rundir + "/drain"
+    self.docker_client = Client(base_url=self.sockpath, version="auto")
     self.conf = {
       "influxdb_url"      : None,             # URL to InfluxDB (with #database)
       "updateconfig"      : 60,               # frequency of config updates (s)
@@ -368,8 +371,26 @@ class Plancton(Daemon):
         else:
           self.logctl.info("Removed container %s", i["Id"])
 
+  def drain(self):
+    self.logctl.info("Drain mode requested: no new containers started")
+    try:
+      os.open(self._drainfile, os.O_CREAT|os.O_EXCL)
+    except OSError as e:
+      if e.errno != errno.EEXIST:
+        self.logctl.error("Cannot create drain status file %s: %s" % (self._drainfile, e))
+        return False
+    return True
+
+  def resume(self):
+    self.logctl.info("Exiting drain mode: new containers will be started")
+    try:
+      os.remove(self._drainfile)
+    except OSError as e:
+      if e.errno != errno.ENOENT:
+        self.logctl.warning("Cannot remove drain status file %s: %s" % (self._drainfile, e))
+
   def onexit(self):
-    self.logctl.info('Graceful termination requested: will exit gracefully soon.')
+    self.logctl.info('Graceful termination requested: will exit gracefully soon')
     self._do_main_loop = False
     return True
 
@@ -378,6 +399,10 @@ class Plancton(Daemon):
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("docker").setLevel(logging.WARNING)
     self._setup_log_files()
+    if not os.path.isdir(self._rundir):
+      os.mkdir(self._rundir, 0700)
+    else:
+      os.chmod(self._rundir, 0700)
     self._read_conf()
     self._influxdb_setup()
     self.docker_pull(*self.conf["docker_image"].split(":", 1))
@@ -390,6 +415,9 @@ class Plancton(Daemon):
     now = time.time()
     delta_config = now - self._last_confup_time
     delta_update = now - self._last_update_time
+    draining = os.path.isfile(self._drainfile)
+    if draining:
+      self.logctl.info("Drain status file %s found: no new containers will be started" % self._drainfile)
     self._overhead_control()
     prev_img = self.conf["docker_image"]
     prev_influxdb_url = self.conf["influxdb_url"]
@@ -409,11 +437,11 @@ class Plancton(Daemon):
     fitting_docks = int(self.idle*0.95*self._num_cpus/(self.conf["cpus_per_dock"]*100))
     launchable_containers = min(fitting_docks, max(self.conf["max_docks"]-running, 0))
     self.logctl.debug('Potentially fitting containers based on CPU utilisation: %d', fitting_docks)
-    if now-self._last_kill_time > self.conf["grace_spawn"]:
+    if not draining and now-self._last_kill_time > self.conf["grace_spawn"]:
       self.logctl.info('Will launch %d new container(s)' % launchable_containers)
       for _ in range(launchable_containers):
         self._start_container(self._create_container())
-    elif launchable_containers > 0:
+    elif not draining and launchable_containers > 0:
       self.logctl.info("Not launching %d containers: too little time elapsed after last kill" % launchable_containers)
     self._control_containers()
     self._last_update_time = time.time()

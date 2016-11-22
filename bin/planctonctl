@@ -12,22 +12,26 @@ from plancton import Plancton
 
 pidfile = '/var/run/plancton.pid'
 logdir = '/var/log/plancton'
+rundir = '/var/run/plancton'
 confdir = '/etc/plancton'
 
 # Parse command-line arguments
 try:
-  opts, args = getopt(sys.argv[1:], '', [ 'user', 'logdir=', 'pidfile=', 'confdir=' ])
+  opts, args = getopt(sys.argv[1:], '', [ 'user', 'logdir=', 'rundir=', 'pidfile=', 'confdir=' ])
   for o, a in opts:
     if o == '--pidfile':
       pidfile = a
     elif o == '--logdir':
       logdir = a
+    elif o == '--rundir':
+      rundir = a
     elif o == '--confdir':
       confdir = a
     elif o == '--user':
       home = os.path.expanduser('~/.plancton')
       pidfile = '%s/plancton.pid' % home
       logdir = '%s/log' % home
+      rundir = '%s/run' % home
       confdir = '%s/conf' % home
       if not os.path.isdir(home):
         os.mkdir(home, 0700)
@@ -45,10 +49,12 @@ try:
 except IndexError:
   cmd = None
 
-daemon_instance = Plancton('plancton', pidfile=pidfile, logdir=logdir, confdir=confdir)
+daemon_instance = Plancton('plancton', pidfile=pidfile, logdir=logdir,
+                                       rundir=rundir, confdir=confdir)
 
 def help():
-  sys.stderr.write('Usage: %s [start|stop|status|nodaemon|help]\n' % os.path.basename(sys.argv[0]))
+  sys.stderr.write('Usage: %s [start|stop|status|nodaemon|drain|resume|help]\n' % \
+                   os.path.basename(sys.argv[0]))
 
 r = None
 if cmd == 'start':
@@ -57,6 +63,10 @@ elif cmd == 'stop':
   r = daemon_instance.stop()
 elif cmd == 'status':
   r = daemon_instance.status()
+elif cmd == 'drain':
+  r = daemon_instance.drain()
+elif cmd == 'resume':
+  r = daemon_instance.resume()
 elif cmd == 'nodaemon':
   r = daemon_instance.run()
 elif cmd == 'help':
