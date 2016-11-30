@@ -36,6 +36,7 @@ class InfluxDBStreamer():
       if not self.create_db():
         return False
     # Line protocol: https://docs.influxdata.com/influxdb/v1.0/write_protocols/line_protocol_tutorial/
+    fields = dict(map(lambda (k,v): (k, '"%s"'%v if isinstance(v, basestring) else v), fields.iteritems()))
     data_string = series + "," +                                              \
                   ",".join(["%s=%s" % (x,tags[x]) for x in tags]) + " " +     \
                   ",".join(["%s=%s" % (x,fields[x]) for x in fields]) + " " + \
@@ -50,7 +51,7 @@ class InfluxDBStreamer():
       self.logctl.debug("Sending data returned %d" % r.status_code)
       r.raise_for_status()
       return True
-    except requests.exceptions.RequestException:
+    except requests.exceptions.RequestException as e:
       self.logctl.error("Error sending data: %s" % e)
       self.db_is_created = False
       return False
