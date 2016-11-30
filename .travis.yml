@@ -27,3 +27,5 @@ script: |
   sudo grep -qi "no new containers will be started" /var/log/plancton/plancton.log || dielog
   sudo planctonctl resume
   [[ ! -e /var/run/plancton/drain ]]
+  sudo planctonctl force-stop
+  sudo grep -qi "not starting containers, killing existing" /var/log/plancton/plancton.log || dielog

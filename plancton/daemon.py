@@ -191,8 +191,8 @@ class Daemon(object):
             running: an example of success is when the daemon wasn't running and `stop()` is
             called. False is returned otherwise.
         """
-
         self.logctl.info('stopping, this may take a while...')
+
         # Get the pid from the pidfile
         self.readPid()
         if not self.isRunning():
@@ -241,20 +241,22 @@ class Daemon(object):
             and the mapping is restored in case exiting is cancelled.
         """
         self.trapExitSignals(self.exitHandlerNoOp)
-        if self.onexit():
-            # Exit was confirmed
-            sys.exit(0)
-        else:
-            # Exit was cancelled
-            self.trapExitSignals(self.exitHandlerReal)
+        self.onexit()
+        self.trapExitSignals(self.exitHandlerReal)
 
     def onexit(self):
         """ Program's exit function, to be overridden by subclasses.
             This function is called when an exit signal is caught: it should be used to implement cleanup
             functions.
-            @return When returning True, exiting continues, when returning False exiting is cancelled
         """
-        return True
+        pass
+
+    def runForeground(self):
+      self.trapExitSignals(self.exitHandlerReal)
+      try:
+        self.run()
+      except KeyboardInterrupt:
+        self.onexit()
 
     def run(self):
         """ Program's main loop, to be overridden by subclasses.
