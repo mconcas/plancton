@@ -179,7 +179,7 @@ class Daemon(object):
             self.logctl.info('Not running')
             return False
 
-    def stop(self):
+    def stop(self, no_timeout=False):
         """ Stop the daemon.
             An attempt to kill the daemon is performed for 30 seconds sending **signal 15 (SIGTERM)**: if
             the daemon is implemented properly, it will perform its shutdown operations and it will exit
@@ -200,9 +200,9 @@ class Daemon(object):
             return True
         # Try killing the daemon process gracefully
         kill_count = 0
-        kill_count_threshold = 60
+        kill_count_threshold = 120
         try:
-            while kill_count < kill_count_threshold:
+            while no_timeout or kill_count < kill_count_threshold:
                 os.kill(self.pid, signal.SIGTERM)
                 time.sleep(1)
                 kill_count = kill_count + 1

@@ -63,10 +63,10 @@ elif cmd == 'force-start':
   r = daemon_instance.resume()
   r = daemon_instance.start()
 elif cmd == 'stop':
-  r = daemon_instance.stop()
+  r = daemon_instance.stop(no_timeout=False)
 elif cmd == 'force-stop':
   r = daemon_instance.kill()
-  r = daemon_instance.stop()
+  r = daemon_instance.stop(no_timeout=True)
 elif cmd == 'status':
   r = daemon_instance.status()
 elif cmd == 'drain':
