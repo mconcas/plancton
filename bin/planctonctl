@@ -59,6 +59,9 @@ def help():
 r = None
 if cmd == 'start':
   r = daemon_instance.start()
+elif cmd == 'force-start':
+  r = daemon_instance.resume()
+  r = daemon_instance.start()
 elif cmd == 'stop':
   r = daemon_instance.stop()
 elif cmd == 'force-stop':
