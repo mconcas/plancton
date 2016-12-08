@@ -443,6 +443,9 @@ class Plancton(Daemon):
   def main_loop(self):
     self._set_cpu_efficiency()
     now = time.time()
+    self.streamer(series="daemon",
+                  tags={ "hostname": self._hostname },
+                  fields={ "uptime": now - self._start_time })
     delta_config = now - self._last_confup_time
     delta_update = now - self._last_update_time
     draining = os.path.isfile(self._drainfile)
