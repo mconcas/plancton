@@ -14,6 +14,7 @@ pidfile = '/var/run/plancton.pid'
 logdir = '/var/log/plancton'
 rundir = '/var/run/plancton'
 confdir = '/etc/plancton'
+run_as_unpriv = False
 
 # Parse command-line arguments
 try:
@@ -28,21 +29,24 @@ try:
     elif o == '--confdir':
       confdir = a
     elif o == '--user':
-      home = os.path.expanduser('~/.plancton')
-      pidfile = '%s/plancton.pid' % home
-      logdir = '%s/log' % home
-      rundir = '%s/run' % home
-      confdir = '%s/conf' % home
-      if not os.path.isdir(home):
-        os.mkdir(home, 0700)
-      else:
-        os.chmod(home, 0700)
+      run_as_unpriv = True
     else:
       assert False, 'This should not happen: o=%s a=%s' % (o, a)
 
 except GetoptError as e:
   sys.stderr.write('plancton: %s\n' % e)
   sys.exit(1)
+
+if run_as_unpriv or os.getuid() != 0:
+  home = os.path.expanduser('~/.plancton')
+  pidfile = '%s/plancton.pid' % home
+  logdir = '%s/log' % home
+  rundir = '%s/run' % home
+  confdir = '%s/conf' % home
+  if not os.path.isdir(home):
+    os.mkdir(home, 0700)
+  else:
+    os.chmod(home, 0700)
 
 try:
   cmd = args[0]
