@@ -39,9 +39,9 @@ except GetoptError as e:
 
 if run_as_unpriv or os.getuid() != 0:
   home = os.path.expanduser('~/.plancton')
-  pidfile = '%s/plancton.pid' % home
   logdir = '%s/log' % home
   rundir = '%s/run' % home
+  pidfile = '%s/plancton.pid' % rundir
   confdir = '%s/conf' % home
   if not os.path.isdir(home):
     os.mkdir(home, 0700)
