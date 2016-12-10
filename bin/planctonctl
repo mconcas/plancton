@@ -38,20 +38,26 @@ except GetoptError as e:
   sys.exit(1)
 
 if run_as_unpriv or os.getuid() != 0:
-  home = os.path.expanduser('~/.plancton')
-  logdir = '%s/log' % home
-  rundir = '%s/run' % home
+  userprefix = os.path.expanduser('~/.plancton')
+  logdir = '%s/log' % userprefix
+  rundir = '%s/run' % userprefix
   pidfile = '%s/plancton.pid' % rundir
-  confdir = '%s/conf' % home
-  if not os.path.isdir(home):
-    os.mkdir(home, 0700)
+  confdir = '%s/conf' % userprefix
+  if not os.path.isdir(userprefix):
+    os.mkdir(userprefix, 0700)
   else:
-    os.chmod(home, 0700)
+    os.chmod(userprefix, 0700)
 
 try:
   cmd = args[0]
 except IndexError:
   cmd = None
+
+for subdir in [logdir,rundir,confdir]:
+  if not os.path.isdir(subdir):
+    os.mkdir(subdir, 0700)
+  else:
+    os.chmod(subdir, 0700)
 
 daemon_instance = Plancton('plancton', pidfile=pidfile, logdir=logdir,
                                        rundir=rundir, confdir=confdir)

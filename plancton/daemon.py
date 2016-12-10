@@ -60,6 +60,7 @@ class Daemon(object):
         """ Write PID to pidfile."""
         with open(self.pidFile, 'w') as pf:
             pf.write( str(self.pid) + '\n' )
+            os.chmod(self.pidFile, 0644)
 
     def readPid(self):
         """ Read PID from pidfile."""
