@@ -457,10 +457,7 @@ class Plancton(Daemon):
     if draining:
       self.logctl.info("Drain status file %s found: no new containers will be started" % self._drainfile)
     if self._force_kill:
-      self.logctl.info("Force stop file %s found: not starting containers, killing existing" % self._fstopfile)
-    self.streamer(series="daemon",
-                  tags={ "hostname": self._hostname },
-                  fields={ "status": "draining" if draining else "active" })
+      self.logctl.info("Force kill file %s found: not starting containers, killing existing" % self._fstopfile)
     self._overhead_control()
     prev_img = self.conf["docker_image"]
     prev_influxdb_url = self.conf["influxdb_url"]
@@ -476,7 +473,11 @@ class Plancton(Daemon):
     self.logctl.debug("CPU used: %.2f%%, available: %.2f%%" % (self.efficiency, self.idle))
     self.streamer(series="measurement",
                   tags={ "hostname": self._hostname },
-                  fields={ "cpu_eff": self.efficiency, "containers": running })
+                  fields={ "cpu_eff": self.efficiency })
+    self.streamer(series="daemon",
+                  tags={ "hostname": self._hostname },
+                  fields={ "containers": running,
+                           "status": "draining" if draining else "active" })
     fitting_docks = int(self.idle*0.95*self._num_cpus/(self.conf["cpus_per_dock"]*100))
     launchable_containers = min(fitting_docks, max(self.conf["max_docks"]-running, 0))
     self.logctl.debug("Potentially fitting containers based on CPU utilisation: %d", fitting_docks)
