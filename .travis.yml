@@ -15,17 +15,31 @@ install: |
 script: |
   set -ex
   PIDFILE=/var/run/plancton.pid
+  LOGFILE=/var/log/plancton/plancton.log
+  DRAINFILE=/var/run/plancton/drain
+  STOPFILE=/var/run/plancton/stop
   dielog() {
-    sudo cat /var/log/plancton/plancton.log
+    sudo cat $LOGFILE
     return 1
   }
   ls -l $PIDFILE || true
   sudo test -f $PIDFILE || dielog
   sudo kill -0 $(sudo cat $PIDFILE) || dielog
   sudo planctonctl drain
+  sudo test -f $DRAINFILE || dielog
   sleep 40
-  sudo grep -qi "no new containers will be started" /var/log/plancton/plancton.log || dielog
+  sudo grep -qi "no new containers will be started" $LOGFILE || dielog
   sudo planctonctl resume
-  [[ ! -e /var/run/plancton/drain ]]
+  ! sudo test -f $DRAINFILE || dielog
   sudo planctonctl force-stop
-  sudo grep -qi "not starting containers, killing existing" /var/log/plancton/plancton.log || dielog
+  sudo grep -qi "not starting containers, killing existing" $LOGFILE || dielog
+  sudo planctonctl start
+  ls -l $PIDFILE || true
+  sudo test -f $PIDFILE || dielog
+  sudo kill -0 $(sudo cat $PIDFILE) || dielog
+  sudo planctonctl drain-stop
+  sudo test -f $DRAINFILE || dielog
+  sleep 40
+  sudo grep -qi "no new containers will be started" $LOGFILE || dielog
+  sudo grep -qi "drain-stop requested" $LOGFILE || dielog
+  sudo test -f $DRAINFILE && ! sudo test -f $STOPFILE || dielog/LOGFILE
