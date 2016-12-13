@@ -12,27 +12,24 @@ from plancton import Plancton
 
 pidfile = '/var/run/plancton.pid'
 logdir = '/var/log/plancton'
+rundir = '/var/run/plancton'
 confdir = '/etc/plancton'
+run_as_unpriv = False
 
 # Parse command-line arguments
 try:
-  opts, args = getopt(sys.argv[1:], '', [ '--user', 'logdir=', 'pidfile=', 'confdir=' ])
+  opts, args = getopt(sys.argv[1:], '', [ 'user', 'logdir=', 'rundir=', 'pidfile=', 'confdir=' ])
   for o, a in opts:
     if o == '--pidfile':
       pidfile = a
     elif o == '--logdir':
       logdir = a
+    elif o == '--rundir':
+      rundir = a
     elif o == '--confdir':
       confdir = a
     elif o == '--user':
-      home = os.path.expanduser('~/.plancton')
-      pidfile = '%s/plancton.pid' % home
-      logdir = '%s/log' % home
-      confdir = '%s/conf' % home
-      if not os.path.isdir(daemondir):
-        os.mkdir(daemondir, 0700)
-      else:
-        os.chmod(daemondir, 0700)
+      run_as_unpriv = True
     else:
       assert False, 'This should not happen: o=%s a=%s' % (o, a)
 
@@ -40,25 +37,56 @@ except GetoptError as e:
   sys.stderr.write('plancton: %s\n' % e)
   sys.exit(1)
 
+if run_as_unpriv or os.getuid() != 0:
+  userprefix = os.path.expanduser('~/.plancton')
+  logdir = '%s/log' % userprefix
+  rundir = '%s/run' % userprefix
+  pidfile = '%s/plancton.pid' % rundir
+  confdir = '%s/conf' % userprefix
+  if not os.path.isdir(userprefix):
+    os.mkdir(userprefix, 0700)
+  else:
+    os.chmod(userprefix, 0700)
+
 try:
   cmd = args[0]
 except IndexError:
   cmd = None
 
-daemon_instance = Plancton('plancton', pidfile=pidfile, logdir=logdir, confdir=confdir)
+for subdir in [logdir,rundir,confdir]:
+  if not os.path.isdir(subdir):
+    os.mkdir(subdir, 0700)
+  else:
+    os.chmod(subdir, 0700)
+
+daemon_instance = Plancton('plancton', pidfile=pidfile, logdir=logdir,
+                                       rundir=rundir, confdir=confdir)
 
 def help():
-  sys.stderr.write('Usage: %s [start|stop|status|nodaemon|help]\n' % os.path.basename(sys.argv[0]))
+  sys.stderr.write('usage: %s [start|force-start|stop|force-stop|status|nodaemon|drain|drain-stop|resume|help]\n' % \
+                   os.path.basename(sys.argv[0]))
 
 r = None
 if cmd == 'start':
   r = daemon_instance.start()
+elif cmd == 'force-start':
+  r = daemon_instance.resume()
+  r = daemon_instance.start()
 elif cmd == 'stop':
-  r = daemon_instance.stop()
+  r = daemon_instance.stop(no_timeout=False)
+elif cmd == 'force-stop':
+  r = daemon_instance.kill()
+  r = daemon_instance.stop(no_timeout=True)
 elif cmd == 'status':
   r = daemon_instance.status()
+elif cmd == 'drain':
+  r = daemon_instance.drain()
+elif cmd == 'drain-stop':
+  r = daemon_instance.drain(stop=True)
+elif cmd == 'resume':
+  r = daemon_instance.resume()
 elif cmd == 'nodaemon':
-  r = daemon_instance.run()
+  r = daemon_instance.runForeground()
 elif cmd == 'help':
   help()
   r = True

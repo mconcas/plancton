@@ -27,8 +27,8 @@ class Daemon(object):
         self.pid = None
 
         ## Custom logger for control messages
-        self.logctl = logging.getLogger( self.name )
-        logctl_formatter = logging.Formatter(name + ': %(levelname)s: %(message)s')
+        self.logctl = logging.getLogger()
+        logctl_formatter = logging.Formatter(name+'[%(name)s]: %(levelname)s: %(message)s')
         stderr_handler = logging.StreamHandler(sys.stderr)
         stderr_handler.setFormatter(logctl_formatter)
         self.logctl.addHandler(stderr_handler)
@@ -39,7 +39,7 @@ class Daemon(object):
             syslog_handler.setFormatter(logctl_formatter)
             self.logctl.addHandler(syslog_handler)
 
-        self.logctl.setLevel(logging.DEBUG)
+        self.logctl.setLevel(logging.INFO)
 
     def getSyslogHandler(self, log_level=logging.DEBUG, formatter=None):
         """ Gets a syslog handler on Linux and OS X.
@@ -60,6 +60,7 @@ class Daemon(object):
         """ Write PID to pidfile."""
         with open(self.pidFile, 'w') as pf:
             pf.write( str(self.pid) + '\n' )
+            os.chmod(self.pidFile, 0644)
 
     def readPid(self):
         """ Read PID from pidfile."""
@@ -179,7 +180,7 @@ class Daemon(object):
             self.logctl.info('Not running')
             return False
 
-    def stop(self):
+    def stop(self, no_timeout=False):
         """ Stop the daemon.
             An attempt to kill the daemon is performed for 30 seconds sending **signal 15 (SIGTERM)**: if
             the daemon is implemented properly, it will perform its shutdown operations and it will exit
@@ -191,8 +192,8 @@ class Daemon(object):
             running: an example of success is when the daemon wasn't running and `stop()` is
             called. False is returned otherwise.
         """
-
         self.logctl.info('stopping, this may take a while...')
+
         # Get the pid from the pidfile
         self.readPid()
         if not self.isRunning():
@@ -200,9 +201,9 @@ class Daemon(object):
             return True
         # Try killing the daemon process gracefully
         kill_count = 0
-        kill_count_threshold = 60
+        kill_count_threshold = 120
         try:
-            while kill_count < kill_count_threshold:
+            while no_timeout or kill_count < kill_count_threshold:
                 os.kill(self.pid, signal.SIGTERM)
                 time.sleep(1)
                 kill_count = kill_count + 1
@@ -241,20 +242,22 @@ class Daemon(object):
             and the mapping is restored in case exiting is cancelled.
         """
         self.trapExitSignals(self.exitHandlerNoOp)
-        if self.onexit():
-            # Exit was confirmed
-            sys.exit(0)
-        else:
-            # Exit was cancelled
-            self.trapExitSignals(self.exitHandlerReal)
+        self.onexit()
+        self.trapExitSignals(self.exitHandlerReal)
 
     def onexit(self):
         """ Program's exit function, to be overridden by subclasses.
             This function is called when an exit signal is caught: it should be used to implement cleanup
             functions.
-            @return When returning True, exiting continues, when returning False exiting is cancelled
         """
-        return True
+        pass
+
+    def runForeground(self):
+      self.trapExitSignals(self.exitHandlerReal)
+      try:
+        self.run()
+      except KeyboardInterrupt:
+        self.onexit()
 
     def run(self):
         """ Program's main loop, to be overridden by subclasses.

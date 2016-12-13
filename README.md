@@ -1,35 +1,74 @@
-# Plancton: an opoortunistic computing project based on Docker containers
+Plancton: opportunistic computing using Docker containers
+=========================================================
+
 [![Build Status](https://travis-ci.org/mconcas/plancton.svg?branch=master)](https://travis-ci.org/mconcas/plancton)
+[![PyPI version](https://badge.fury.io/py/plancton.svg)](https://badge.fury.io/py/plancton)
 
-Plancton is a lightweight daemon written in Python, with the aim to administer a set of docker containers, regardless
-of the application running on top of the service (i.e. inside containers).
-
-To work it requires the [Docker](https://www.docker.com/) engine on the host, and few more python modules (installed via `pip`):
-1. [`docker-py`](https://github.com/docker/docker-py) Python module to access the Docker API interface
-2. [`prettytable`](https://pypi.python.org/pypi/PrettyTable) to better format Plancton logfile
-3. [`pyyaml`](http://pyyaml.org/) to parse Plancton configuration
-
-## Installation
-Plancton is installable via pip:
-
-	$ pip install plancton
-
-## Configuration
-Plancton needs to be bootstrapped from a configuration, by design cloned from a `git` repository.
-As super-user run:
-
-	# plancton-bootstrap <repository-name:branch-tag>
-
-### Dryrun
-A dry-run example is available by running:
-
-	# plancton-bootstrap <mconcas/plancton-conf:dryrun>
-
-or:
-
-	# plancton-bootstrap --dryrun
-
-It will run a sample of a Plancton setup relying only on `busybox` pilot containers that will sleep for some time and will auto-terminate after that.
+Plancton continuously deploys pilot Docker containers running any application
+you want based on the amount of available system resources.
 
 
-[Credits for the name to G.]
+Main features
+-------------
+
+* **Upgrade pilot jobs to pilot containers.** Plancton is meant to run "pilot"
+  containers: your container starts and tries to fetch something to do. When the
+  container exits, Plancton will replace it with a brand new one. An example of
+  application easy to containerize is
+  [WorkQueue from cctools](https://github.com/cooperative-computing-lab/cctools)).
+
+* **Meant for clusters.** Pilot applications are containerized and deployed on
+  a cluster of nodes, each one of them running a Plancton instance. Plancton
+  instances are totally independent, therefore it naturally scales.
+
+* **Monitoring.** Sends monitoring data to [InfluxDB](https://www.influxdata.com/),
+  easy to plot via [Grafana](http://grafana.org/).
+
+* **Containers for the masses.** Plancton brings the features of Docker
+  containers (environment consistency, isolation, sandboxing) to disposable
+  cluster applications. Plancton is not a replacement to
+  [Apache Mesos](http://mesos.apache.org/) or [Kubernetes](http://kubernetes.io/)
+  but it is a very simple and lightweight alternative when you don't need all
+  the extra features they offer.
+
+
+Instant gratification
+---------------------
+
+[Docker](https://www.docker.com) is required, and a recent Linux operating
+system.
+
+Install the latest version with `pip`:
+
+    pip install plancton
+
+If you want to install from the master branch (use at your own risk):
+
+    pip install git+https://github.com/mconcas/plancton
+
+Plancton can be run as root or as any user with Docker privileges:
+
+    planctonctl start
+
+
+Configure
+---------
+
+The configuration file is located under `/etc/plancton/config.yaml` and it can
+be modified while Plancton is running. By default it starts with an empty
+configuration running dummy `busybox` containers.
+
+You can get configurations with:
+
+    plancton-bootstrap <gh-user/gh-repo:branch>
+
+and they'll be downloaded to the correct place. An example dry run configuration
+can be obtained with:
+
+    plancton-bootstrap <mconcas/plancton-conf:dryrun>
+
+
+Credits
+-------
+
+Credits for the name go to G.

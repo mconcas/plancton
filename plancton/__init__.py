@@ -10,8 +10,8 @@ from datetime import datetime
 from daemon import Daemon
 from docker import Client
 import docker.errors as de
-import requests.exceptions as re
 import sys
+from influxdb_streamer import InfluxDBStreamer
 
 def apparmor_enabled():
   try:
@@ -45,15 +45,18 @@ def robust(tries=5, delay=3, backoff=2):
       while ltries > 1:
         try:
           return f(self, *args, **kwargs)
-        except re.ConnectionError, e:
+        except requests.exceptions.ConnectionError, e:
           msg = "[%s], Failed to reach docker, retrying in %d seconds." % \
               (f.__name__, ldelay)
           self.logctl.warning(msg)
           self.logctl.warning(e)
+          self.streamer(series="daemon",
+                        tags={ "hostname": self._hostname },
+                        fields={ "status": "waiting" })
           time.sleep(ldelay)
           ltries -= 1
           ldelay *= backoff
-        except re.ReadTimeout, e: # Unresponsive docker daemon
+        except requests.exceptions.ReadTimeout, e: # Unresponsive docker daemon
           msg = "[%s], Failed to reach docker, retrying in %d seconds." % (f.__name__, ldelay)
           self.logctl.warning(msg)
           self.logctl.warning(e)
@@ -64,6 +67,9 @@ def robust(tries=5, delay=3, backoff=2):
           msg = "[%s], Failed to successfully evade API request, retrying in %d seconds" % (f.__name__, ldelay)
           self.logctl.warning(msg)
           self.logctl.warning(e)
+          self.streamer(series="daemon",
+                        tags={ "hostname": self._hostname },
+                        fields={ "status": "waiting" })
           time.sleep(ldelay)
           ltries -= 1
           ldelay *= backoff
@@ -75,7 +81,7 @@ def robust(tries=5, delay=3, backoff=2):
   return robust_decorator
 
 class Plancton(Daemon):
-  __version__ = '0.5.1'
+  __version__ = '0.6.0'
   @robust()
   def container_list(self, all=True):
     return self.docker_client.containers(all=all)
@@ -103,39 +109,47 @@ class Plancton(Daemon):
    return float(100 - self.efficiency)
 
   # Set daemon name, pidfile, log directory and location of docker socket.
-  def __init__(self, name, pidfile, logdir, confdir, socket_location='unix://var/run/docker.sock'):
+  def __init__(self, name, pidfile, logdir, rundir, confdir,
+               socket_url="unix://var/run/docker.sock"):
     super(Plancton, self).__init__(name, pidfile)
     self._start_time = self._last_update_time = self._last_confup_time = time.time()
     self._last_kill_time = 0
     self._overhead_first_time = 0
     self.uptime0,self.idletime0 = cpu_times()
     self._logdir = logdir
+    self._rundir = rundir
     self._confdir = confdir
-    self.sockpath = socket_location
+    self.sockpath = socket_url
     self._num_cpus = cpu_count()
     self._hostname = gethostname().split('.')[0]
     self._cont_config = None  # container configuration (dict)
-    self._container_prefix = "plancton-slave"
-    self.docker_client = Client(base_url=self.sockpath, version='auto')
+    self._container_prefix = "plancton-worker"
+    self._drainfile = self._rundir + "/drain"
+    self._drainfile_stop = self._rundir + "/stop"
+    self._fstopfile = self._rundir + "/force-stop"
+    self._force_kill = False
+    self._do_main_loop = True
+    self.docker_client = Client(base_url=self.sockpath, version="auto")
     self.conf = {
-      "updateconfig"      : 60,              # frequency of config updates (s)
-      "image_expiration"  : 43200,           # frequency of image updates (s)
-      "main_sleep"        : 30,              # main loop sleep (s)
-      "grace_kill"        : 120,             # kill containers after that many s over CPU threshold
-      "grace_spawn"       : 60,              # spawn containers that many seconds after last kill
-      "cpus_per_dock"     : 1,               # number of CPUs per container (non-integer)
-      "max_docks"         : "ncpus - 2",     # expression to compute max number of containers
-      "max_ttl"           : 43200,           # max ttl for a container (default: 12 hours)
-      "docker_image"      : "busybox",       # Docker image: repository[:tag]
-      "docker_cmd"        : "/bin/sleep 60", # command to run (string or list)
-      "docker_privileged" : False,           # give super privileges to the container
-      "max_dock_mem"      : 2000000000,      # maximum RAM memory per container (in bytes)
-      "max_dock_swap"     : 0,               # maximum swap per container (in bytes)
-      "binds"             : [],              # list of bind mounts (all in read-only)
-      "devices"           : [],              # list of exposed devices
-      "capabilities"      : [],              # list of added capabilities (e.g. SYS_ADMIN)
-      "security_opts"     : []               # list of security options (e.g. apparmor profile)
-  }
+      "influxdb_url"      : None,             # URL to InfluxDB (with #database)
+      "updateconfig"      : 60,               # frequency of config updates (s)
+      "image_expiration"  : 43200,            # frequency of image updates (s)
+      "main_sleep"        : 30,               # main loop sleep (s)
+      "grace_kill"        : 120,              # kill after secs over CPU threshold
+      "grace_spawn"       : 60,               # spawn secs after last kill
+      "cpus_per_dock"     : 1,                # number of CPUs per container (frac)
+      "max_docks"         : "ncpus - 2",      # expression: compute max containers
+      "max_ttl"           : 43200,            # max ttl for a container (12 hours)
+      "docker_image"      : "busybox",        # Docker image: repository[:tag]
+      "docker_cmd"        : "/bin/sleep 60",  # command to run (string or list)
+      "docker_privileged" : False,            # run container privileged
+      "max_dock_mem"      : 2000000000,       # maximum RAM per container (bytes)
+      "max_dock_swap"     : 0,                # maximum swap per container (bytes)
+      "binds"             : [],               # list of bind mounts (all read-only)
+      "devices"           : [],               # list of exposed devices
+      "capabilities"      : [],               # list of added caps (e.g. SYS_ADMIN)
+      "security_opts"     : []                # sec options (e.g. apparmor profile)
+    }
 
   # Get only own running containers, youngest container first if reverse=True.
   def _filtered_list(self, name, reverse=True):
@@ -157,7 +171,7 @@ class Plancton(Daemon):
       mode='a', maxBytes=10000000, backupCount=50)
     log_file_handler.setFormatter(logging.Formatter(format, datefmt))
     log_file_handler.doRollover()
-    self.logctl.setLevel(10)
+    self.logctl.setLevel(logging.DEBUG)
     self.logctl.addHandler(log_file_handler)
 
   # Parse configuration file `config.yaml` and change default value if specified.
@@ -175,7 +189,18 @@ class Plancton(Daemon):
     self.conf["max_docks"] = int(eval(str(self.conf["max_docks"])))
     if not isinstance(self.conf["docker_cmd"], list):
       self.conf["docker_cmd"] = self.conf["docker_cmd"].split(" ")
+    if self.conf["influxdb_url"] and not "#" in self.conf["influxdb_url"]:
+      # Invalid InfluxDB URL: disable monitoring
+      self.conf["influxdb_url"] = None
     self.logctl.debug("Configuration:\n%s" % json.dumps(self.conf, indent=2))
+
+  # Set up monitoring target.
+  def _influxdb_setup(self):
+    if not self.conf["influxdb_url"]:
+      self.streamer = lambda *x,**y: True
+      return
+    baseurl,db = self.conf["influxdb_url"].split("#")
+    self.streamer = InfluxDBStreamer(baseurl=baseurl, database=db)
 
   # Efficiency is calculated subtracting idletime per cpu from uptime.
   def _set_cpu_efficiency(self):
@@ -262,7 +287,7 @@ class Plancton(Daemon):
       self.logctl.error('No active process found for %s with PID %s.' % (container["Id"], jj['State']['Pid']))
       return None
 
-  # Pretty print the statuses of controlled containers.
+  # Pretty print the statuses of controlled containers.
   def _dump_container_list(self):
     status_table = PrettyTable(['n\'', 'docker hash', 'status', 'docker name', '   pid   '])
     status_table.align["   pid   "] = "r"
@@ -282,7 +307,7 @@ class Plancton(Daemon):
         status_table.add_row([num, shortid, status, name, pid])
     self.logctl.info('Container list:\n' + str(status_table))
 
-  # Return the number of running containers.
+  # Return the number of running containers.
   def _count_containers(self):
     try:
       clist = self.container_list(all=False)
@@ -305,20 +330,49 @@ class Plancton(Daemon):
         continue
       to_remove = False
       # TTL threshold block
-      if i['Status'].startswith("Up"):
+      if "running" in i['State']:
         try:
           insdata = self.container_inspect(i["Id"])
         except Exception as e:
           self.logctl.error("Couldn't get container information! %s", e)
         else:
           statobj = datetime.strptime(insdata['State']['StartedAt'][:19], "%Y-%m-%dT%H:%M:%S")
-          if (utc_time() - time.mktime(statobj.timetuple())) > self.conf["max_ttl"]:
-            self.logctl.info('Killing %s since it exceeded the max TTL', i['Id'])
+          dock_uptime = utc_time() - time.mktime(statobj.timetuple())
+          if dock_uptime > self.conf["max_ttl"] or self._force_kill:
+            if self._force_kill:
+              self.logctl.info("Force killing %s" if self._force_kill else \
+                               "Killing %s since it exceeded the max TTL", i['Id'])
+            self.streamer(series="container",
+                          tags={ "hostname": self._hostname,
+                                 "started": True,
+                                 "killed": True },
+                          fields={ "uptime": dock_uptime })
             to_remove = True
           else:
             self.logctl.debug("Container %s is below its maximum TTL, leaving it alone", i["Id"])
       else:
+        # Bad status block
         self.logctl.info("Killing %s as it has a bad status (%s)", i["Id"], i["Status"])
+        if "exited" in i["State"]:
+          try:
+            insdata = self.container_inspect(i["Id"])
+          except Exception as e:
+            self.logctl.error("Couldn't get container information! %s", e)
+          else:
+            statobj_start = datetime.strptime(insdata['State']['StartedAt'][:19], "%Y-%m-%dT%H:%M:%S")
+            statobj_end = datetime.strptime(insdata['State']['FinishedAt'][:19], "%Y-%m-%dT%H:%M:%S")
+            dock_uptime = time.mktime(statobj_end.timetuple()) - time.mktime(statobj_start.timetuple())
+            self.streamer(series="container",
+                          tags={ "hostname": self._hostname,
+                                 "started": True,
+                                 "killed": False },
+                          fields={"uptime": dock_uptime})
+        if "created" in i["State"]:
+          self.streamer(series="container",
+                        tags={ "hostname": self._hostname,
+                               "started": False,
+                               "killed": False },
+                        fields={ "uptime": 0 })
         to_remove = True
 
       if to_remove:
@@ -327,59 +381,132 @@ class Plancton(Daemon):
         except Exception as e:
           self.logctl.warning('It was not possible to remove container with id %s: %s', i['Id'], e)
         else:
-          self.logctl.info('Removed container %s', i["Id"])
+          self.logctl.info("Removed container %s", i["Id"])
+    if self._force_kill:
+      self._force_kill = False
+      try:
+        os.remove(self._fstopfile)
+      except OSError as e:
+        if e.errno != errno.ENOENT:
+          self.logctl.error("Cannot remove force-stop status file %s: %s" % (self._fstopfile, e))
 
-  def onexit(self):
-    self.logctl.info('Graceful termination requested: will exit gracefully soon.')
-    self._do_main_loop = False
+  def drain(self, stop=False):
+    try:
+      os.open(self._drainfile, os.O_CREAT|os.O_EXCL)
+      if stop:
+        self.logctl.info("Drain-stop mode requested, no new containers started, will exit afterwards")
+        os.open(self._drainfile_stop, os.O_CREAT|os.O_EXCL)
+      else:
+        self.logctl.info("Drain mode requested, no new containers started")
+    except OSError as e:
+      if e.errno != errno.EEXIST:
+        self.logctl.error("Cannot create drain/drain-stop status file(s): %s" % e)
+        return False
     return True
 
+  def resume(self):
+    self.logctl.info("Exiting drain mode: new containers will be started")
+    try:
+      os.remove(self._drainfile)
+    except OSError as e:
+      if e.errno != errno.ENOENT:
+        self.logctl.warning("Cannot remove drain status file %s: %s" % (self._drainfile, e))
+
+  def kill(self):
+    self.logctl.info("Force-stop mode requested: not starting new containers and killing running ones")
+    try:
+      os.open(self._fstopfile, os.O_CREAT|os.O_EXCL)
+    except OSError as e:
+      if e.errno != errno.EEXIST:
+        self.logctl.error("Cannot create force-stop status file %s: %s" % (self._fstopfile, e))
+        return False
+    return True
+
+  def onexit(self):
+    self.logctl.info("Graceful termination requested: will exit gracefully soon")
+    self._do_main_loop = False
+
   def init(self):
-    self.logctl.info('---- plancton daemon v%s ----' % self.__version__)
+    logging.getLogger("requests").setLevel(logging.WARNING)
+    logging.getLogger("docker").setLevel(logging.WARNING)
     self._setup_log_files()
+    self.logctl.info("---- plancton v%s running with pid %d ----" % (self.__version__, os.getpid()))
+    try:
+      os.remove(self._fstopfile)
+    except OSError as e:
+      pass
+    if not os.path.isdir(self._rundir):
+      os.mkdir(self._rundir, 0700)
+    else:
+      os.chmod(self._rundir, 0700)
     self._read_conf()
+    self._influxdb_setup()
     self.docker_pull(*self.conf["docker_image"].split(":", 1))
     self._control_containers()
-    self._do_main_loop = True
 
   # Main loop, do comparison between uptime and thresholds sets for updates.
   def main_loop(self):
     self._set_cpu_efficiency()
     now = time.time()
+    self.streamer(series="daemon",
+                  tags={ "hostname": self._hostname },
+                  fields={ "uptime": now - self._start_time })
     delta_config = now - self._last_confup_time
     delta_update = now - self._last_update_time
+    draining = os.path.isfile(self._drainfile)
+    if draining:
+      self.logctl.info("Drain status file %s found: no new containers will be started" % self._drainfile)
+    if self._force_kill:
+      self.logctl.info("Force kill file %s found: not starting containers, killing existing" % self._fstopfile)
     self._overhead_control()
     prev_img = self.conf["docker_image"]
-    if delta_config >= int(self.conf['updateconfig']):
+    prev_influxdb_url = self.conf["influxdb_url"]
+    if delta_config >= int(self.conf["updateconfig"]):
       self._read_conf()
       self._last_confup_time = time.time()
-    if prev_img != self.conf["docker_image"] or delta_update >= int(self.conf['image_expiration']):
+    if prev_img != self.conf["docker_image"] or delta_update >= int(self.conf["image_expiration"]):
       self.docker_pull(*self.conf["docker_image"].split(":", 1))
       self._last_update_time = time.time()
+    if prev_influxdb_url != self.conf["influxdb_url"]:
+      self._influxdb_setup()
     running = self._count_containers()
-    self.logctl.debug('CPU used: %.2f%%, available: %.2f%%' % (self.efficiency, self.idle))
+    self.logctl.debug("CPU used: %.2f%%, available: %.2f%%" % (self.efficiency, self.idle))
+    self.streamer(series="measurement",
+                  tags={ "hostname": self._hostname },
+                  fields={ "cpu_eff": self.efficiency })
+    self.streamer(series="daemon",
+                  tags={ "hostname": self._hostname },
+                  fields={ "containers": running,
+                           "status": "draining" if draining else "active" })
     fitting_docks = int(self.idle*0.95*self._num_cpus/(self.conf["cpus_per_dock"]*100))
     launchable_containers = min(fitting_docks, max(self.conf["max_docks"]-running, 0))
-    self.logctl.debug('Potentially fitting containers based on CPU utilisation: %d', fitting_docks)
-    if now-self._last_kill_time > self.conf["grace_spawn"]:
-      self.logctl.info('Will launch %d new container(s)' % launchable_containers)
+    self.logctl.debug("Potentially fitting containers based on CPU utilisation: %d", fitting_docks)
+    if not draining and not self._force_kill and now-self._last_kill_time > self.conf["grace_spawn"]:
+      self.logctl.info("Will launch %d new container(s)" % launchable_containers)
       for _ in range(launchable_containers):
         self._start_container(self._create_container())
-    elif launchable_containers > 0:
+    elif not draining and not self._force_kill and launchable_containers > 0:
       self.logctl.info("Not launching %d containers: too little time elapsed after last kill" % launchable_containers)
     self._control_containers()
     self._last_update_time = time.time()
     self._dump_container_list()
+    if running == 0 and draining and os.path.isfile(self._drainfile_stop):
+      self.logctl.info("Drain-stop requested. No running containers found, will exit.")
+      os.remove(self._drainfile_stop)
+      self.onexit()
+
 
   # Main daemon function. Return is in the range 0-255.
   def run(self):
     self.init()
-    while self._do_main_loop:
+    while self._do_main_loop or self._force_kill:
       count = 0
       self.main_loop()
       self.logctl.debug("Sleeping %d seconds..." % self.conf["main_sleep"])
-      while self._do_main_loop and count < self.conf["main_sleep"]:
+      self._force_kill = os.path.isfile(self._fstopfile)
+      while self._do_main_loop and count < self.conf["main_sleep"] and not self._force_kill:
         time.sleep(1)
         count = count+1
-    self.logctl.info("Exiting gracefully.")
+        self._force_kill = os.path.isfile(self._fstopfile)
+    self.logctl.info("Exiting gracefully")
     return 0
