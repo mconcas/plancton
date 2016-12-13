@@ -27,6 +27,12 @@ def pid_exists(pid):
       return False
   return True
 
+def mem_size():
+  return int(os.sysconf('SC_PAGE_SIZE')*os.sysconf('SC_PHYS_PAGES'))
+
+def swap_size():
+  return [ int(x.split(":")[1].strip().split(" ")[0])*1024 for x in open("/proc/meminfo").read().split("\n") if x.startswith("SwapTotal") ][0]
+
 def cpu_count():
   return int(os.sysconf("SC_NPROCESSORS_ONLN"))
 
@@ -119,7 +125,7 @@ class Plancton(Daemon):
     self._logdir = logdir
     self._rundir = rundir
     self._confdir = confdir
-    self.sockpath = socket_url
+    self._sockpath = socket_url
     self._num_cpus = cpu_count()
     self._hostname = gethostname().split('.')[0]
     self._cont_config = None  # container configuration (dict)
@@ -129,7 +135,7 @@ class Plancton(Daemon):
     self._fstopfile = self._rundir + "/force-stop"
     self._force_kill = False
     self._do_main_loop = True
-    self.docker_client = Client(base_url=self.sockpath, version="auto")
+    self.docker_client = Client(base_url=self._sockpath, version="auto")
     self.conf = {
       "influxdb_url"      : None,             # URL to InfluxDB (with #database)
       "updateconfig"      : 60,               # frequency of config updates (s)
@@ -186,6 +192,8 @@ class Plancton(Daemon):
     for k in self.conf:
       self.conf[k] = conf.get(k, self.conf[k])
     ncpus = cpu_count()
+    ram_bytes = mem_size()
+    swap_bytes = swap_size()
     self.conf["max_docks"] = int(eval(str(self.conf["max_docks"])))
     if not isinstance(self.conf["docker_cmd"], list):
       self.conf["docker_cmd"] = self.conf["docker_cmd"].split(" ")
