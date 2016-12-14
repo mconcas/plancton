@@ -10,36 +10,61 @@ install: |
   git rev-parse HEAD
   sudo pip install -e .
   sudo plancton-bootstrap mconcas/plancton-conf:travis-test
-  sudo planctonctl start
 
 script: |
   set -ex
-  PIDFILE=/var/run/plancton.pid
-  LOGFILE=/var/log/plancton/plancton.log
-  DRAINFILE=/var/run/plancton/drain
-  STOPFILE=/var/run/plancton/stop
   dielog() {
     sudo cat $LOGFILE
     return 1
   }
-  ls -l $PIDFILE || true
-  sudo test -f $PIDFILE || dielog
-  sudo kill -0 $(sudo cat $PIDFILE) || dielog
-  sudo planctonctl drain
-  sudo test -f $DRAINFILE || dielog
-  sleep 40
-  sudo grep -qi "no new containers will be started" $LOGFILE || dielog
-  sudo planctonctl resume
-  ! sudo test -f $DRAINFILE || dielog
-  sudo planctonctl force-stop
-  sudo grep -qi "not starting containers, killing existing" $LOGFILE || dielog
-  sudo planctonctl start
-  ls -l $PIDFILE || true
-  sudo test -f $PIDFILE || dielog
-  sudo kill -0 $(sudo cat $PIDFILE) || dielog
-  sudo planctonctl drain-stop
-  sudo test -f $DRAINFILE || dielog
-  sleep 40
-  sudo grep -qi "no new containers will be started" $LOGFILE || dielog
-  sudo grep -qi "drain-stop requested" $LOGFILE || dielog
-  sudo test -f $DRAINFILE && ! sudo test -f $STOPFILE || dielog/LOGFILE
+  nosudo() {
+    "$@"
+  }
+
+  for MODE in sudo nosudo; do
+    case $MODE in
+      sudo)   PIDFILE=/var/run/plancton.pid
+              LOGFILE=/var/log/plancton/plancton.log
+              DRAINFILE=/var/run/plancton/drain
+              STOPFILE=/var/run/plancton/stop ;;
+      nosudo) PIDFILE=$HOME/.plancton/run/plancton.pid
+              LOGFILE=$HOME/.plancton/log/plancton.log
+              DRAINFILE=$HOME/.plancton/run/drain
+              STOPFILE=$HOME/.plancton/run/stop ;;
+    esac
+
+    # Test Plancton startup
+    $MODE planctonctl start
+    $MODE test -f $PIDFILE || dielog
+    $MODE kill -0 $($MODE cat $PIDFILE) || dielog
+
+    # Test Plancton drain mode
+    $MODE planctonctl drain
+    $MODE test -f $DRAINFILE || dielog
+    sleep 40
+    $MODE grep -qi "no new containers will be started" $LOGFILE || dielog
+
+    # Test Plancton exiting drain mode
+    $MODE planctonctl resume
+    ! $MODE test -f $DRAINFILE || dielog
+
+    # Test Plancton force-stop mode
+    $MODE planctonctl force-stop
+    $MODE grep -qi "not starting containers, killing existing" $LOGFILE || dielog
+
+    # Test Plancton drain and then stop mode
+    $MODE planctonctl start
+    $MODE test -f $PIDFILE || dielog
+    $MODE kill -0 $($MODE cat $PIDFILE) || dielog
+    $MODE planctonctl drain-stop
+    $MODE test -f $DRAINFILE || dielog
+    sleep 40
+    $MODE grep -qi "no new containers will be started" $LOGFILE || dielog
+    $MODE grep -qi "drain-stop requested" $LOGFILE || dielog
+    $MODE test -f $DRAINFILE || dielog
+    ! $MODE test -f $STOPFILE || dielog
+
+    # Test Plancton stop
+    $MODE planctonctl stop
+    ! $MODE test -f $PIDFILE || dielog
+  done
