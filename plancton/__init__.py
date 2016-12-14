@@ -191,10 +191,17 @@ class Plancton(Daemon):
       conf = {}
     for k in self.conf:
       self.conf[k] = conf.get(k, self.conf[k])
-    ncpus = cpu_count()
-    ram_bytes = mem_size()
-    swap_bytes = swap_size()
-    self.conf["max_docks"] = int(eval(str(self.conf["max_docks"])))
+    try:
+      self.conf["max_docks"] = int(eval(str(self.conf["max_docks"]),
+                                        { "ram_bytes": mem_size(),
+                                          "swap_bytes": swap_size(),
+                                          "ncpus": cpu_count(),
+                                          "max_dock_mem": conf["max_dock_mem"],
+                                          "max_dock_swap": conf["max_dock_swap"] }))
+    except Exception as e:
+      self.logctl.error("configuration for max_docks is invalid, falling back to zero: %s: %s" % \
+                        (self.conf["max_docks"], e))
+      self.conf["max_docks"] = 0
     if not isinstance(self.conf["docker_cmd"], list):
       self.conf["docker_cmd"] = self.conf["docker_cmd"].split(" ")
     if self.conf["influxdb_url"] and not "#" in self.conf["influxdb_url"]:
