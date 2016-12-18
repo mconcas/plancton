@@ -9,7 +9,7 @@ from prettytable import PrettyTable
 from datetime import datetime
 from daemon import Daemon
 from docker import Client
-import docker.errors as de
+import docker.errors
 import sys
 from influxdb_streamer import InfluxDBStreamer
 
@@ -51,65 +51,64 @@ def robust(tries=5, delay=3, backoff=2):
       while ltries > 1:
         try:
           return f(self, *args, **kwargs)
-        except requests.exceptions.ConnectionError, e:
-          msg = "[%s], Failed to reach docker, retrying in %d seconds." % \
-              (f.__name__, ldelay)
-          self.logctl.warning(msg)
-          self.logctl.warning(e)
+        except requests.exceptions.ConnectionError as e:
+          self.logctl.warning("In %s: cannot connect to Docker, retrying in %d s: %s" % \
+                              (f.__name__, ldelay, e))
           self.streamer(series="daemon",
                         tags={ "hostname": self._hostname },
                         fields={ "status": "waiting" })
           time.sleep(ldelay)
           ltries -= 1
           ldelay *= backoff
-        except requests.exceptions.ReadTimeout, e: # Unresponsive docker daemon
-          msg = "[%s], Failed to reach docker, retrying in %d seconds." % (f.__name__, ldelay)
-          self.logctl.warning(msg)
-          self.logctl.warning(e)
+        except requests.exceptions.ReadTimeout as e: # Unresponsive docker daemon
+          self.logctl.warning("In %s: Docker timed out, retrying in %d s: %s" % \
+                              (f.__name__, ldelay, e))
           time.sleep(ldelay)
           ltries -= 1
           ldelay *= backoff
-        except de.APIError, e:
-          msg = "[%s], Failed to successfully evade API request, retrying in %d seconds" % (f.__name__, ldelay)
-          self.logctl.warning(msg)
-          self.logctl.warning(e)
+        except docker.errors.DockerException as e:
+          self.logctl.warning("In %s: API request failed, retrying in %d seconds: %s" % \
+                              (f.__name__, ldelay, e))
           self.streamer(series="daemon",
                         tags={ "hostname": self._hostname },
                         fields={ "status": "waiting" })
           time.sleep(ldelay)
           ltries -= 1
           ldelay *= backoff
-        except Exception, e:
-          raise
-      self.logctl.error("Call [%s] failed, after %d tentatives." % (f.__name__, tries))
-      return f(self, *args, **kwargs)
+      raise Exception("In %s: call failed after %d attempts, giving up" % (f.__name__, tries))
     return robust_call
   return robust_decorator
+
+class Lazy():
+  def __init__(self, init_func):
+    self.content = None
+    self.init_func = init_func
+  def __call__(self):
+    if not self.content:
+      self.content = self.init_func()
+    return self.content
 
 class Plancton(Daemon):
   __version__ = '0.6.0'
   @robust()
   def container_list(self, all=True):
-    return self.docker_client.containers(all=all)
+    return self.docker_client().containers(all=all)
   @robust()
   def container_remove(self, id, force):
-    return self.docker_client.remove_container(container=id, force=force)
-  @robust()
-  def docker_info(self):
-    return self.docker_client.info
+    return self.docker_client().remove_container(container=id, force=force)
   @robust()
   def docker_pull(self, repository, tag="latest"):
     self.logctl.debug("Pulling: repo %s tag %s" % (repository, tag))
-    return self.docker_client.pull(repository=repository, tag=tag)
+    return self.docker_client().pull(repository=repository, tag=tag)
   @robust()
   def container_create_from_conf(self, jsonconf, name):
-    return self.docker_client.create_container_from_config(config=jsonconf, name=name)
+    return self.docker_client().create_container_from_config(config=jsonconf, name=name)
   @robust()
   def container_inspect(self, id):
-    return self.docker_client.inspect_container(container=id)
+    return self.docker_client().inspect_container(container=id)
   @robust()
   def container_start(self, id):
-    return self.docker_client.start(container=id)
+    return self.docker_client().start(container=id)
   @property
   def idle(self):
    return float(100 - self.efficiency)
@@ -135,7 +134,8 @@ class Plancton(Daemon):
     self._fstopfile = self._rundir + "/force-stop"
     self._force_kill = False
     self._do_main_loop = True
-    self.docker_client = Client(base_url=self._sockpath, version="auto")
+    self._has_image = False
+    self.docker_client = Lazy(lambda: Client(base_url=self._sockpath, version="auto"))
     self.conf = {
       "influxdb_url"      : None,             # URL to InfluxDB (with #database)
       "updateconfig"      : 60,               # frequency of config updates (s)
@@ -160,7 +160,11 @@ class Plancton(Daemon):
   # Get only own running containers, youngest container first if reverse=True.
   def _filtered_list(self, name, reverse=True):
     self.logctl.debug("Fetching list of Plancton running containers")
-    jlist = self.container_list(all=True)
+    try:
+      jlist = self.container_list(all=True)
+    except Exception as e:
+      self.logctl.error("Couldn't get containers list, returning empty: %s" % e)
+      return []
     fjlist = [ d for d in jlist if (d.get("Names", [""])[0][1:].startswith(name) and d["Status"].startswith("Up")) ]
     srtlist = sorted(fjlist, key=lambda k: k["Created"], reverse=reverse)
     return srtlist
@@ -319,7 +323,11 @@ class Plancton(Daemon):
         shortid = c['Id'][:12]
         status = c['Status'].lower()
         name = c['Names'][0][1:]
-        pid = self.container_inspect(id=c['Id'])['State'].get('Pid', 0)
+        try:
+          pid = self.container_inspect(id=c['Id'])['State'].get('Pid', 0)
+        except Exception as e:
+          self.logctl.warning("While inspecting container %s: %s" % (shortid, e))
+          continue
         pid = "" if pid == 0 else str(pid)
         status_table.add_row([num, shortid, status, name, pid])
     self.logctl.info('Container list:\n' + str(status_table))
@@ -458,7 +466,11 @@ class Plancton(Daemon):
       os.chmod(self._rundir, 0700)
     self._read_conf()
     self._influxdb_setup()
-    self.docker_pull(*self.conf["docker_image"].split(":", 1))
+    try:
+      self.docker_pull(*self.conf["docker_image"].split(":", 1))
+      self._has_image = True
+    except Exception as e:
+      self.logctl.error("Cannot pull Docker image %s during init: will retry later" % self.conf["docker_image"])
     self._control_containers()
 
   # Main loop, do comparison between uptime and thresholds sets for updates.
@@ -481,9 +493,15 @@ class Plancton(Daemon):
     if delta_config >= int(self.conf["updateconfig"]):
       self._read_conf()
       self._last_confup_time = time.time()
-    if prev_img != self.conf["docker_image"] or delta_update >= int(self.conf["image_expiration"]):
-      self.docker_pull(*self.conf["docker_image"].split(":", 1))
-      self._last_update_time = time.time()
+    if not self._has_image or prev_img != self.conf["docker_image"] or delta_update >= int(self.conf["image_expiration"]):
+      self._has_image = False
+      try:
+        self.docker_pull(*self.conf["docker_image"].split(":", 1))
+        self._has_image = True
+        self._last_update_time = time.time()
+      except Exception as e:
+        self.logctl.error("Cannot pull Docker image %s: no new containers, will retry later" % \
+                          self.conf["docker_image"])
     if prev_influxdb_url != self.conf["influxdb_url"]:
       self._influxdb_setup()
     running = self._count_containers()
@@ -498,12 +516,13 @@ class Plancton(Daemon):
     fitting_docks = int(self.idle*0.95*self._num_cpus/(self.conf["cpus_per_dock"]*100))
     launchable_containers = min(fitting_docks, max(self.conf["max_docks"]-running, 0))
     self.logctl.debug("Potentially fitting containers based on CPU utilisation: %d", fitting_docks)
-    if not draining and not self._force_kill and now-self._last_kill_time > self.conf["grace_spawn"]:
-      self.logctl.info("Will launch %d new container(s)" % launchable_containers)
-      for _ in range(launchable_containers):
-        self._start_container(self._create_container())
-    elif not draining and not self._force_kill and launchable_containers > 0:
-      self.logctl.info("Not launching %d containers: too little time elapsed after last kill" % launchable_containers)
+    if self._has_image and not draining and not self._force_kill:
+      if now-self._last_kill_time > self.conf["grace_spawn"]:
+        self.logctl.info("Will launch %d new container(s)" % launchable_containers)
+        for _ in range(launchable_containers):
+          self._start_container(self._create_container())
+      elif launchable_containers > 0:
+        self.logctl.info("Not launching %d containers: too little time elapsed after last kill" % launchable_containers)
     self._control_containers()
     self._last_update_time = time.time()
     self._dump_container_list()
