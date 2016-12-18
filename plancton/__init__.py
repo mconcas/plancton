@@ -311,6 +311,7 @@ class Plancton(Daemon):
       clist = self.container_list(all=True)
     except Exception as e:
       self.logctl.error("Couldn't get container list: %s", e)
+      return
     num = 0
     for c in clist:
       if c.get("Names", [""])[0][1:].startswith(self._container_prefix):
