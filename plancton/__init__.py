@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import docker, json, pprint, requests, yaml
-import base64, string, time, os, random, errno
+import base64, string, time, os, shutil, random, errno
 from functools import wraps
 from yaml import YAMLError
 from socket import gethostname
@@ -151,6 +151,7 @@ class Plancton(Daemon):
       "docker_privileged" : False,            # run container privileged
       "max_dock_mem"      : 2000000000,       # maximum RAM per container (bytes)
       "max_dock_swap"     : 0,                # maximum swap per container (bytes)
+      "sandbox"           : None,             # directory prefix for sandboxing (with #destination)
       "binds"             : [],               # list of bind mounts (all read-only)
       "devices"           : [],               # list of exposed devices
       "capabilities"      : [],               # list of added caps (e.g. SYS_ADMIN)
@@ -242,16 +243,23 @@ class Plancton(Daemon):
       if now-self._overhead_first_time > self.conf["grace_kill"]:
         cont_list = self._filtered_list(name=self._container_prefix)
         if cont_list:
-          self.logctl.debug("Killing container %s" % cont_list[0]["Id"])
+          self.logctl.info("Killing container %s" % cont_list[0]["Id"])
           try:
             self.container_remove(cont_list[0]["Id"], force=True)
             self._last_kill_time = time.time()
           except Exception as e:
             self.logctl.error("Cannot remove %s: %s", cont_list[0]["Id"], e)
           else:
-            self.logctl.info('Container %s removed successfully' % cont_list[0]["Id"])
+            self.logctl.info("Container %s removed successfully" % cont_list[0]["Id"])
+          # Sandbox cleanup
+          if self.conf["sandbox"]:
+            try:
+              sandbox_name = self.container_inspect(cont_list[0]["Id"])["Name"]
+              shutil.rmtree(sandbox_name)
+            except Exception as e:
+              self.logctl.warning("Impossible to remove sandbox with name %s, belonging to container %s: %s", sandbox_name, cont_list[0]["Id"], e)
         else:
-          self.logctl.debug('No workers found, nothing to do')
+          self.logctl.debug("No workers found, nothing to do")
           self._overhead_first_time = 0
     else:
       self._overhead_first_time = 0
@@ -259,7 +267,20 @@ class Plancton(Daemon):
   # Create a container. Returns the container ID on success, None otherwise.
   def _create_container(self):
     uuid = ''.join(random.SystemRandom().choice(string.digits + string.ascii_lowercase) for _ in range(6))
-    cname = self._container_prefix + '-' + uuid
+    cname = self._container_prefix + "-" + uuid
+    # Sandboxing
+    sandbox = []
+    if self.conf["sandbox"]:
+      sandbox_origin = self.conf["sandbox"].split("#")[0].rstrip("/") + "/" + cname
+      sandbox_dest = self.conf["sandbox"].split("#")[1].rstrip("/")
+      try:
+        os.makedirs(sandbox_origin)
+      except OSError as e:
+        self.logctl.error("Error creating sandbox, skipping container creation %s", e)
+        return None
+      else:
+        sandbox.append(sandbox_origin + ":" + sandbox_dest + ":rw")
+
     c = { "Cmd"        : self.conf["docker_cmd"],
           "Image"      : self.conf["docker_image"],
           "Hostname"   : "plancton-%s-%s" % (self._hostname[:40], uuid),
@@ -267,7 +288,7 @@ class Plancton(Daemon):
                            "CpuPeriod"   : 100000,
                            "NetworkMode" : "bridge",
                            "SecurityOpt" : self.conf["security_opts"] if apparmor_enabled() else [],
-                           "Binds"       : [ x+":ro,Z" for x in self.conf["binds"] ],
+                           "Binds"       : [ x+":ro,Z" for x in self.conf["binds"] ] + sandbox,
                            "Memory"      : self.conf["max_dock_mem"],
                            "MemorySwap"  : self.conf["max_dock_mem"] + self.conf["max_dock_swap"],
                            "Privileged"  : self.conf["docker_privileged"],
@@ -404,9 +425,17 @@ class Plancton(Daemon):
         try:
           self.container_remove(id=i['Id'], force=True)
         except Exception as e:
-          self.logctl.warning('It was not possible to remove container with id %s: %s', i['Id'], e)
+          self.logctl.warning("It was not possible to remove container with id %s: %s", i["Id"], e)
         else:
           self.logctl.info("Removed container %s", i["Id"])
+        # Sandbox cleanup
+        if self.conf["sandbox"]:
+          try:
+            sandbox_name = self.container_inspect(i["Id"])["Name"]
+            shutil.rmtree(sandbox_name)
+          except Exception as e:
+            self.logctl.warning("Impossible to remove sandbox with name %s, belonging to container %s: %s", sandbox_name, i["Id"], e)
+
     if self._force_kill:
       self._force_kill = False
       try:
