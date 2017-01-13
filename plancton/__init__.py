@@ -244,13 +244,6 @@ class Plancton(Daemon):
         cont_list = self._filtered_list(name=self._container_prefix)
         if cont_list:
           self.logctl.info("Killing container %s" % cont_list[0]["Id"])
-          try:
-            self.container_remove(cont_list[0]["Id"], force=True)
-            self._last_kill_time = time.time()
-          except Exception as e:
-            self.logctl.error("Cannot remove %s: %s", cont_list[0]["Id"], e)
-          else:
-            self.logctl.info("Container %s removed successfully" % cont_list[0]["Id"])
           # Sandbox cleanup
           if self.conf["sandbox"]:
             try:
@@ -258,6 +251,14 @@ class Plancton(Daemon):
               shutil.rmtree(sandbox_name)
             except Exception as e:
               self.logctl.warning("Impossible to remove sandbox with name %s, belonging to container %s: %s", sandbox_name, cont_list[0]["Id"], e)
+          try:
+            self.container_remove(cont_list[0]["Id"], force=True)
+            self._last_kill_time = time.time()
+          except Exception as e:
+            self.logctl.error("Cannot remove %s: %s", cont_list[0]["Id"], e)
+          else:
+            self.logctl.info("Container %s removed successfully" % cont_list[0]["Id"])
+
         else:
           self.logctl.debug("No workers found, nothing to do")
           self._overhead_first_time = 0
