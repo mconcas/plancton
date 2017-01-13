@@ -422,19 +422,21 @@ class Plancton(Daemon):
         to_remove = True
 
       if to_remove:
-        try:
-          self.container_remove(id=i['Id'], force=True)
-        except Exception as e:
-          self.logctl.warning("It was not possible to remove container with id %s: %s", i["Id"], e)
-        else:
-          self.logctl.info("Removed container %s", i["Id"])
         # Sandbox cleanup
         if self.conf["sandbox"]:
           try:
             sandbox_name = self.container_inspect(i["Id"])["Name"]
             shutil.rmtree(sandbox_name)
           except Exception as e:
-            self.logctl.warning("Impossible to remove sandbox with name %s, belonging to container %s: %s", sandbox_name, i["Id"], e)
+            self.logctl.warning("Sandbox %s not found for container %s: %s", sandbox_name, i["Id"], e)
+
+        # Container cleanup
+        try:
+          self.container_remove(id=i['Id'], force=True)
+        except Exception as e:
+          self.logctl.warning("It was not possible to remove container with id %s: %s", i["Id"], e)
+        else:
+          self.logctl.info("Removed container %s", i["Id"])
 
     if self._force_kill:
       self._force_kill = False
