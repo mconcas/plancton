@@ -248,7 +248,7 @@ class Plancton(Daemon):
           if self.conf["sandbox"]:
             try:
               sandbox_name = self.container_inspect(cont_list[0]["Id"])["Name"]
-              shutil.rmtree(sandbox_name)
+              shutil.rmtree(self.conf["sandbox"].split("#")[0].rstrip("/") + "/" + sandbox_name)
             except Exception as e:
               self.logctl.warning("Impossible to remove sandbox with name %s, belonging to container %s: %s", sandbox_name, cont_list[0]["Id"], e)
           try:
@@ -427,7 +427,7 @@ class Plancton(Daemon):
         if self.conf["sandbox"]:
           try:
             sandbox_name = self.container_inspect(i["Id"])["Name"]
-            shutil.rmtree(sandbox_name)
+            shutil.rmtree(self.conf["sandbox"].split("#")[0].rstrip("/") + "/" + sandbox_name)
           except Exception as e:
             self.logctl.warning("Sandbox %s not found for container %s: %s", sandbox_name, i["Id"], e)
 
