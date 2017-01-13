@@ -201,8 +201,8 @@ class Plancton(Daemon):
                                         { "ram_bytes": mem_size(),
                                           "swap_bytes": swap_size(),
                                           "ncpus": cpu_count(),
-                                          "max_dock_mem": conf["max_dock_mem"],
-                                          "max_dock_swap": conf["max_dock_swap"] }))
+                                          "max_dock_mem": self.conf["max_dock_mem"],
+                                          "max_dock_swap": self.conf["max_dock_swap"] }))
     except Exception as e:
       self.logctl.error("configuration for max_docks is invalid, falling back to zero: %s: %s" % \
                         (self.conf["max_docks"], e))
