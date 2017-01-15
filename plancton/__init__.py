@@ -151,6 +151,7 @@ class Plancton(Daemon):
       "docker_privileged" : False,            # run container privileged
       "max_dock_mem"      : 2000000000,       # maximum RAM per container (bytes)
       "max_dock_swap"     : 0,                # maximum swap per container (bytes)
+      "user_group"        : "0:0",            # run container as uid:gid
       "binds"             : [],               # list of bind mounts (all read-only)
       "devices"           : [],               # list of exposed devices
       "capabilities"      : [],               # list of added caps (e.g. SYS_ADMIN)
@@ -263,6 +264,7 @@ class Plancton(Daemon):
     c = { "Cmd"        : self.conf["docker_cmd"],
           "Image"      : self.conf["docker_image"],
           "Hostname"   : "plancton-%s-%s" % (self._hostname[:40], uuid),
+          "User"       : self.conf["user_group"],
           "HostConfig" : { "CpuQuota"    : int(self.conf["cpus_per_dock"]*100000.),
                            "CpuPeriod"   : 100000,
                            "NetworkMode" : "bridge",
