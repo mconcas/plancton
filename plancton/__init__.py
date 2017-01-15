@@ -145,6 +145,7 @@ class Plancton(Daemon):
       "grace_spawn"       : 60,               # spawn secs after last kill
       "cpus_per_dock"     : 1,                # number of CPUs per container (frac)
       "max_docks"         : "ncpus - 2",      # expression: compute max containers
+      "docks_per_loop"    : 4,                # max docks launched each loop
       "max_ttl"           : 43200,            # max ttl for a container (12 hours)
       "docker_image"      : "busybox",        # Docker image: repository[:tag]
       "docker_cmd"        : "/bin/sleep 60",  # command to run (string or list)
@@ -379,8 +380,9 @@ class Plancton(Daemon):
             self.logctl.debug("Container %s is below its maximum TTL, leaving it alone", i["Id"])
       else:
         # Bad status block
-        self.logctl.info("Killing %s as it has a bad status (%s)", i["Id"], i["Status"])
+        self.logctl.info("Killing non-running container %s (status is %s)", i["Id"], i["Status"])
         if "exited" in i["State"]:
+          # Container has terminated
           try:
             insdata = self.container_inspect(i["Id"])
           except Exception as e:
@@ -395,6 +397,7 @@ class Plancton(Daemon):
                                  "killed": False },
                           fields={"uptime": dock_uptime})
         if "created" in i["State"]:
+          # Container has never had any chance to start :-(
           self.streamer(series="container",
                         tags={ "hostname": self._hostname,
                                "started": False,
@@ -409,6 +412,7 @@ class Plancton(Daemon):
           self.logctl.warning('It was not possible to remove container with id %s: %s', i['Id'], e)
         else:
           self.logctl.info("Removed container %s", i["Id"])
+        self._last_kill_time = time.time()
     if self._force_kill:
       self._force_kill = False
       try:
@@ -516,15 +520,20 @@ class Plancton(Daemon):
                   fields={ "containers": running,
                            "status": "draining" if draining else "active" })
     fitting_docks = int(self.idle*0.95*self._num_cpus/(self.conf["cpus_per_dock"]*100))
-    launchable_containers = min(fitting_docks, max(self.conf["max_docks"]-running, 0))
+    launchable_containers = min(fitting_docks,
+                                max(self.conf["max_docks"]-running, 0),
+                                self.conf["docks_per_loop"])
     self.logctl.debug("Potentially fitting containers based on CPU utilisation: %d", fitting_docks)
     if self._has_image and not draining and not self._force_kill:
       if now-self._last_kill_time > self.conf["grace_spawn"]:
         self.logctl.info("Will launch %d new container(s)" % launchable_containers)
         for _ in range(launchable_containers):
-          self._start_container(self._create_container())
+          if not self._start_container(self._create_container()):
+            self.logctl.warning("Starting container failed: not attempting to launch other containers this time")
+            break
       elif launchable_containers > 0:
-        self.logctl.info("Not launching %d containers: too little time elapsed after last kill" % launchable_containers)
+        self.logctl.info("Not launching %d containers: too little time since last kill" % \
+                         launchable_containers)
     self._control_containers()
     self._last_update_time = time.time()
     self._dump_container_list()
