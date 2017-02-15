@@ -5,11 +5,14 @@ services:
 
 language: python
 
+before_install:
+  - sudo apt-get -qq update
+  - sudo apt-get install -y jq
+
 install: |
   set -x
   git rev-parse HEAD
   sudo pip install -e .
-  sudo plancton-bootstrap mconcas/plancton-conf:travis-test
 
 script: |
   set -ex
@@ -26,11 +29,13 @@ script: |
       sudo)   PIDFILE=/var/run/plancton.pid
               LOGFILE=/var/log/plancton/plancton.log
               DRAINFILE=/var/run/plancton/drain
-              STOPFILE=/var/run/plancton/stop ;;
+              STOPFILE=/var/run/plancton/stop
+              CONFDIR=/var/run/plancton/conf ;;
       nosudo) PIDFILE=$HOME/.plancton/run/plancton.pid
               LOGFILE=$HOME/.plancton/log/plancton.log
               DRAINFILE=$HOME/.plancton/run/drain
-              STOPFILE=$HOME/.plancton/run/stop ;;
+              STOPFILE=$HOME/.plancton/run/stop
+              CONFDIR=$HOME/.plancton/conf ;;
     esac
 
     # Test Plancton startup
@@ -67,4 +72,25 @@ script: |
     # Test Plancton stop
     $MODE planctonctl stop
     ! $MODE test -f $PIDFILE || dielog
+
+    # Test Plancton multi-streaming
+    $MODE rm -f $DRAINFILE || true
+    $MODE mkdir -p $CONFDIR
+    echo "influxdb_url:" | $MODE tee $CONFDIR/config.yaml
+    for I in {1..2}; do
+      echo "- http://0.0.0.0:$(docker run -d -P influxdb | xargs docker port | awk '{print $3}' | cut -d: -f2 | tee -a influxdb_ports)#plancton-monitor" | \
+        $MODE tee -a $CONFDIR/config.yaml
+    done
+
+    $MODE planctonctl --confdir=$CONFDIR start
+    sleep 60
+    for PORT in $(cat influxdb_ports); do
+      OUT=$(curl -s http://0.0.0.0:$PORT/query?pretty=true --data db=plancton-monitor --data-urlencode 'q=SELECT COUNT(*) FROM "measurement"' | \
+        jq '.results[0].series[0].values[0][1]')
+      [[ $OUT -gt 0 ]] || { echo "ERROR: InfluxDB good query on port $PORT returned $OUT"; dielog; }
+      OUT=$(curl -s http://0.0.0.0:$PORT/query?pretty=true --data db=plancton-monitor-nope --data-urlencode 'q=SELECT COUNT(*) FROM "measurement"' | \
+        jq '.results[0].series[0].values[0][1]')
+      [[ $OUT == null ]] || { echo "ERROR: InfluxDB bad query on port $PORT returned $OUT"; dielog; }
+    done
+    $MODE rm -f influxdb_ports
   done

@@ -22,7 +22,8 @@ class InfluxDBStreamer():
       r = requests.get(self.baseurl + "/query",
                        headers=self._headers_query,
                        params={ "q": "CREATE DATABASE \"%s\"" % self.database,
-                                "db": self.database })
+                                "db": self.database },
+                       timeout=5)
       self.logctl.debug("Creating database %s returned %d" % (self.database, r.status_code))
       r.raise_for_status()
       self.db_is_created = True
@@ -47,7 +48,8 @@ class InfluxDBStreamer():
       r = requests.post(self.baseurl+"/write",
                         headers=self._headers_write,
                         params={ "db": self.database },
-                        data=data_string.encode("utf-8"))
+                        data=data_string.encode("utf-8"),
+                        timeout=5)
       self.logctl.debug("Sending data returned %d" % r.status_code)
       r.raise_for_status()
       return True
@@ -55,3 +57,10 @@ class InfluxDBStreamer():
       self.logctl.error("Error sending data: %s" % e)
       self.db_is_created = False
       return False
+
+  def __hash__(self):
+    return hash(self.baseurl + "#" + self.database)
+
+  def __eq__(self, rh):
+    return self.baseurl == rh.baseurl and self.database == rh.database
+
