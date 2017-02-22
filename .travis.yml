@@ -81,16 +81,23 @@ script: |
       echo "- http://0.0.0.0:$(docker run -d -P influxdb | xargs docker port | awk '{print $3}' | cut -d: -f2 | tee -a influxdb_ports)#plancton-monitor" | \
         $MODE tee -a $CONFDIR/config.yaml
     done
+    openssl req -x509 -newkey rsa:4096 -nodes -subj "/CN=fuffadomain.com" -keyout key.pem -out cert.pem -days 365
+    for I in {1..2}; do
+      echo "- insecure_https://0.0.0.0:$(docker run -d -v $PWD/cert.pem:/cert.pem -v $PWD/key.pem:/key.pem -e INFLUXDB_HTTP_HTTPS_ENABLED=true -e INFLUXDB_HTTP_HTTPS_CERTIFICATE=/cert.pem -e INFLUXDB_HTTP_HTTPS_PRIVATE_KEY=/key.pem -P influxdb | xargs docker port | awk '{print $3}' | cut -d: -f2 | tee -a influxdb_ports_https)#plancton-monitor" | \
+        $MODE tee -a $CONFDIR/config.yaml
+    done
 
     $MODE planctonctl --confdir=$CONFDIR start
     sleep 60
-    for PORT in $(cat influxdb_ports); do
-      OUT=$(curl -s http://0.0.0.0:$PORT/query?pretty=true --data db=plancton-monitor --data-urlencode 'q=SELECT COUNT(*) FROM "measurement"' | \
+    PROTO=http
+    for PORT in $(cat influxdb_ports) https $(cat influxdb_ports_https); do
+      [[ $PORT == https ]] && { PROTO=https; continue; } || true
+      OUT=$(curl -ks $PROTO://0.0.0.0:$PORT/query?pretty=true --data db=plancton-monitor --data-urlencode 'q=SELECT COUNT(*) FROM "measurement"' | \
         jq '.results[0].series[0].values[0][1]')
       [[ $OUT -gt 0 ]] || { echo "ERROR: InfluxDB good query on port $PORT returned $OUT"; dielog; }
-      OUT=$(curl -s http://0.0.0.0:$PORT/query?pretty=true --data db=plancton-monitor-nope --data-urlencode 'q=SELECT COUNT(*) FROM "measurement"' | \
+      OUT=$(curl -ks $PROTO://0.0.0.0:$PORT/query?pretty=true --data db=plancton-monitor-nope --data-urlencode 'q=SELECT COUNT(*) FROM "measurement"' | \
         jq '.results[0].series[0].values[0][1]')
       [[ $OUT == null ]] || { echo "ERROR: InfluxDB bad query on port $PORT returned $OUT"; dielog; }
     done
-    $MODE rm -f influxdb_ports
+    $MODE rm -f influxdb_ports influxdb_ports_https
   done
