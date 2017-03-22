@@ -18,7 +18,6 @@ class InfluxDBStreamer():
     self.baseurl = baseurl
     self.database = database
     self.logctl = logging.getLogger("influxdb_streamer")
-    self.db_is_created = False
     self._headers_query = {"Content-type": "application/json", "Accept": "text/plain"}
     self._headers_write = {"Content-type": "application/octet-stream", "Accept": "text/plain"}
 
@@ -33,16 +32,12 @@ class InfluxDBStreamer():
                        verify=self.ssl_verify)
       self.logctl.debug("Creating database %s returned %d" % (self.database, r.status_code))
       r.raise_for_status()
-      self.db_is_created = True
+      return True
     except requests.exceptions.RequestException as e:
       self.logctl.error("Error creating database: %s" % e)
-      self.db_is_created = False
-    return self.db_is_created
+    return False
 
   def __call__(self, series, tags, fields):
-    if not self.db_is_created:
-      if not self.create_db():
-        return False
     # Line protocol: https://docs.influxdata.com/influxdb/v1.0/write_protocols/line_protocol_tutorial/
     fields = dict(map(lambda (k,v): (k, '"%s"'%v if isinstance(v, basestring) else v), fields.iteritems()))
     data_string = series + "," +                                              \
@@ -51,20 +46,27 @@ class InfluxDBStreamer():
                   str(int((datetime.utcnow()-datetime.utcfromtimestamp(0)).total_seconds()*1000000000))
     self.logctl.debug("Sending line to database %s: %s" % (self.database, data_string))
 
-    try:
-      r = requests.post(self.real_baseurl+"/write",
-                        headers=self._headers_write,
-                        params={ "db": self.database },
-                        data=data_string.encode("utf-8"),
-                        timeout=5,
-                        verify=self.ssl_verify)
-      self.logctl.debug("Sending data returned %d" % r.status_code)
-      r.raise_for_status()
-      return True
-    except requests.exceptions.RequestException as e:
-      self.logctl.error("Error sending data: %s" % e)
-      self.db_is_created = False
-      return False
+    db_created = False
+    while True:
+      try:
+        r = requests.post(self.real_baseurl+"/write",
+                          headers=self._headers_write,
+                          params={ "db": self.database },
+                          data=data_string.encode("utf-8"),
+                          timeout=5,
+                          verify=self.ssl_verify)
+        self.logctl.debug("Sending data returned %d" % r.status_code)
+        r.raise_for_status()
+        return True
+      except requests.exceptions.RequestException as e:
+        if db_created:
+          self.logctl.error("Error sending data: %s" % e)
+          return False
+        else:
+          self.logctl.debug("Error sending data: %s - trying to create database" % e)
+          if not self.create_db():
+            return False
+          db_created = True
 
   def __hash__(self):
     return hash(self.baseurl + "#" + self.database)
