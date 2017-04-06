@@ -19,14 +19,6 @@ def apparmor_enabled():
   except IOError:
     return False
 
-def pid_exists(pid):
-  try:
-    os.kill(pid, 0)
-  except OSError as e:
-    if e.errno != errno.EPERM:
-      return False
-  return True
-
 def mem_size():
   return int(os.sysconf('SC_PAGE_SIZE')*os.sysconf('SC_PHYS_PAGES'))
 
@@ -306,15 +298,12 @@ class Plancton(Daemon):
       return None
     try:
       jj = self.container_inspect(id=container["Id"])
+      pid = int(jj["State"]["Pid"])
+      if pid:
+        return pid
     except Exception as e:
       self.logctl.error(e)
-      return None
-    if pid_exists(jj['State']['Pid']):
-      self.logctl.info('Spawned %s (main PID: %s)' % (str(container["Id"])[:12], jj["State"]["Pid"]))
-      return jj['State']['Pid']
-    else:
-      self.logctl.error('No active process found for %s with PID %s.' % (container["Id"], jj['State']['Pid']))
-      return None
+    return None
 
   # Pretty print the statuses of controlled containers.
   def _dump_container_list(self):
