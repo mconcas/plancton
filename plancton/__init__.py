@@ -268,7 +268,7 @@ class Plancton(Daemon):
                            "CpuPeriod"   : 100000,
                            "NetworkMode" : "bridge",
                            "SecurityOpt" : self.conf["security_opts"] if apparmor_enabled() else [],
-                           "Binds"       : [ x+":ro,Z" for x in self.conf["binds"] ],
+                           "Binds"       : [ x+":rw,shared,Z" for x in self.conf["binds"] ],
                            "Memory"      : self.conf["max_dock_mem"],
                            "MemorySwap"  : self.conf["max_dock_mem"] + self.conf["max_dock_swap"],
                            "Privileged"  : self.conf["docker_privileged"],
