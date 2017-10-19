@@ -421,10 +421,10 @@ class Plancton(Daemon):
 
   def drain(self, stop=False):
     try:
-      os.open(self._drainfile, os.O_CREAT|os.O_EXCL)
+      os.open(self._drainfile, os.O_CREAT|os.O_EXCL, 0644)
       if stop:
         self.logctl.info("Drain-stop mode requested, no new containers started, will exit afterwards")
-        os.open(self._drainfile_stop, os.O_CREAT|os.O_EXCL)
+        os.open(self._drainfile_stop, os.O_CREAT|os.O_EXCL, 0644)
       else:
         self.logctl.info("Drain mode requested, no new containers started")
     except OSError as e:
@@ -444,7 +444,7 @@ class Plancton(Daemon):
   def kill(self):
     self.logctl.info("Force-stop mode requested: not starting new containers and killing running ones")
     try:
-      os.open(self._fstopfile, os.O_CREAT|os.O_EXCL)
+      os.open(self._fstopfile, os.O_CREAT|os.O_EXCL, 0644)
     except OSError as e:
       if e.errno != errno.EEXIST:
         self.logctl.error("Cannot create force-stop status file %s: %s" % (self._fstopfile, e))
